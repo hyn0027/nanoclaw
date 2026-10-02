@@ -1,6 +1,7 @@
 import {
   closeSessionDb,
   getInboundDb,
+  sqliteAppendAction,
   sqliteClearContainerToolInFlight,
   sqliteClearStaleProcessingAcks,
   sqliteSetContainerToolInFlight,
@@ -36,6 +37,7 @@ import {
   parseSessionRoutingRecord,
 } from '../model.generated.js';
 import type {
+  ActionDraft,
   AgentMailbox,
   InboundMessage,
   MailboxOperations,
@@ -224,4 +226,8 @@ export class SqliteAgentMailbox implements AgentMailbox {
 
   clearContainerToolInFlight = sqliteClearContainerToolInFlight;
   clearStaleProcessingAcks = sqliteClearStaleProcessingAcks;
+
+  appendAction(action: ActionDraft): void {
+    sqliteAppendAction(action.event, action.toolUseId ?? null, action.agentId ?? null, JSON.stringify(action.data));
+  }
 }

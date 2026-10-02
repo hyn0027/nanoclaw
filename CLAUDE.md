@@ -78,6 +78,7 @@ For ad-hoc central queries from skills or scripts, use the in-tree wrapper rathe
 | `src/backfill-container-configs.ts` | Migrates legacy `container.json` files into the DB on startup |
 | `src/project-doc-compose.ts` | Composes each group's project document — every instruction source read on the host and inlined into one flat file, no imports |
 | `src/container-restart.ts` | Kill + on-wake respawn for agent group containers |
+| `src/modules/action-log/` | Per-session audit export: copies messages in/out + the runner's `action_log` (tool calls, subagents) to `logs/sessions/<group>/<session>/actions.jsonl`; `scripts/trace.ts` renders it with the OneCLI request log. See [docs/action-log.md](docs/action-log.md) |
 | `src/db/` | DB layer — agent_groups, messaging_groups, sessions, container_configs, user_roles, user_dms, pending_*, migrations |
 | `src/channels/` | Channel adapter infra (registry, Chat SDK bridge); specific channel adapters are skill-installed from the `channels` branch |
 | `src/channels/channel-defaults.ts` | Wiring-creation helpers over adapter-declared channel defaults (`resolveWiringDefaults`, `resolveThreadPolicy`, engage validation) |
@@ -258,6 +259,7 @@ Check these first when something goes wrong:
 | Host logs | `logs/nanoclaw.error.log` first (delivery failures, crash-loop backoff, warnings), then `logs/nanoclaw.log` for the full routing chain |
 | Setup logs | `logs/setup.log` (overall), `logs/setup-steps/*.log` (per-step: bootstrap, environment, container, onecli, mounts, service, etc.) |
 | Session DBs | `data/v2-sessions/<agent-group>/<session>/` — `inbound.db` (`messages_in`: did the message reach the container?), `outbound.db` (`messages_out`: did the agent produce a response?) |
+| Agent action log | `logs/sessions/<agent-group>/<session>/actions.jsonl` — every message in/out plus every tool call with full input/output, subagents, assistant text (host-only copy of outbound `action_log`). `pnpm exec tsx scripts/trace.ts <session-id> [--full] [--follow] [--quiet]` renders it merged with the OneCLI gateway's request log. `NANOCLAW_ACTION_LOG=false` disables. See [docs/action-log.md](docs/action-log.md). |
 
 Note: container logs are lost after the container exits (`--rm` flag). If the agent silently failed inside the container, there's no persistent log to inspect.
 
@@ -303,6 +305,7 @@ This project uses pnpm with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspac
 | [docs/skill-engine-seam.md](docs/skill-engine-seam.md) | Skill-engine consumer contract (wizard / pipeline / agent-relay) + boundary-rule rationale |
 | [docs/templates.md](docs/templates.md) | Agent templates: what they are, stamping via `ncl groups create --template` + the setup wizard, the OneCLI/MCP-credential model, supported providers, and how to contribute one |
 | [docs/hardened-image.md](docs/hardened-image.md) | Opt-in: pull the agent image from a registry instead of building it |
+| [docs/action-log.md](docs/action-log.md) | Per-session agent action log + `scripts/trace.ts` timeline viewer: what's recorded, how, limitations |
 
 ## Container Build Cache
 

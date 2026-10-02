@@ -151,6 +151,18 @@ From a channel you own or administer, you can manage groups and tasks:
 @Andy join the Family Chat group
 ```
 
+### Seeing what an agent did
+
+Every session keeps a host-side action log: messages in and out, every tool call (shell commands, file edits, web fetches) with its full input and output, subagents, and the internet requests the OneCLI gateway proxied for it. View it as one timeline:
+
+```bash
+pnpm exec tsx scripts/trace.ts                       # list sessions
+pnpm exec tsx scripts/trace.ts <session-id> --full   # full timeline with payloads
+pnpm exec tsx scripts/trace.ts <session-id> --follow # watch live
+```
+
+Raw log: `logs/sessions/<agent-group>/<session>/actions.jsonl`. Network entries are URL-level only (no request/response bodies). See [docs/action-log.md](docs/action-log.md).
+
 ## Customizing
 
 NanoClaw doesn't use configuration files. To make changes, just tell Claude Code what you want:

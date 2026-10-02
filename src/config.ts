@@ -19,6 +19,7 @@ const envConfig = readEnvFile([
   'CONTAINER_MEMORY_LIMIT',
   'CONTAINER_PIDS_LIMIT',
   'NANOCLAW_EGRESS_LOCKDOWN',
+  'NANOCLAW_ACTION_LOG',
   'NANOCLAW_EGRESS_NETWORK',
   'ONECLI_GATEWAY_CONTAINER',
   'WEBHOOK_PORT',
@@ -75,6 +76,11 @@ export const STORE_DIR = path.resolve(PROJECT_ROOT, 'store');
 export const GROUPS_DIR = path.resolve(PROJECT_ROOT, 'groups');
 export const DATA_DIR = path.resolve(PROJECT_ROOT, 'data');
 export const CENTRAL_DB_PATH = path.join(DATA_DIR, 'v2.db');
+// Per-session agent action log (tool calls, subagents, messages), exported by
+// src/modules/action-log/. Host-only: never mounted into a container. On by
+// default; NANOCLAW_ACTION_LOG=false disables the export.
+export const SESSION_LOGS_DIR = path.resolve(PROJECT_ROOT, 'logs', 'sessions');
+export const ACTION_LOG_ENABLED = (process.env.NANOCLAW_ACTION_LOG || envConfig.NANOCLAW_ACTION_LOG) !== 'false';
 // Local agent-template library. Committed but ships empty (+ README). Resolved
 // once at load. Override to another LOCAL path via NANOCLAW_TEMPLATES_DIR; never
 // a remote URL, never an ncl flag, never runtime-mutable.

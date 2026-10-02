@@ -42,6 +42,15 @@ export type SessionRouting = SessionRoutingRecord;
 export type OutboundMessageDraft = OutboundWrite;
 export type StateValue = Omit<StateRecord, 'key'>;
 
+/** One action_log row as the runner writes it; `data` is any JSON-serializable payload. */
+export interface ActionDraft {
+  event: string;
+  toolUseId?: string | null;
+  /** Subagent id; null/absent for the main agent. */
+  agentId?: string | null;
+  data: unknown;
+}
+
 export interface MailboxOperations {
   getPendingMessages(limit: number, isFirstPoll: boolean): InboundMessage[];
   markMessages(ids: string[], status: ProcessingStatus): void;
@@ -64,6 +73,8 @@ export interface MailboxOperations {
   setContainerToolInFlight(tool: string, declaredTimeoutMs: number | null): void;
   clearContainerToolInFlight(): void;
   clearStaleProcessingAcks(): void;
+  /** Optional: implementations without an action log simply don't record. */
+  appendAction?(action: ActionDraft): void;
 }
 
 export interface AgentMailbox {

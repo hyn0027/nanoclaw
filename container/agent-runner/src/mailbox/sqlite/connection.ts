@@ -112,8 +112,35 @@ export function getOutboundDb(): Database {
         updated_at               TEXT NOT NULL
       );
     `);
+    // action_log: append-only audit of what the agent did (tool calls with
+    // full input/output, subagent lifecycle, assistant text). The host copies
+    // new rows out to logs/sessions/ on every active poll.
+    _outbound.exec(ACTION_LOG_SCHEMA);
   }
   return _outbound;
+}
+
+const ACTION_LOG_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS action_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT NOT NULL,
+    event       TEXT NOT NULL,
+    tool_use_id TEXT,
+    agent_id    TEXT,
+    data        TEXT NOT NULL
+  );
+`;
+
+/** Append one action_log row. `data` is already-serialized JSON. */
+export function sqliteAppendAction(
+  event: string,
+  toolUseId: string | null,
+  agentId: string | null,
+  data: string,
+): void {
+  getOutboundDb()
+    .prepare(`INSERT INTO action_log (timestamp, event, tool_use_id, agent_id, data) VALUES (?, ?, ?, ?, ?)`)
+    .run(new Date().toISOString(), event, toolUseId, agentId, data);
 }
 
 /**
@@ -234,6 +261,7 @@ export function initTestSessionDb(): { inbound: Database; outbound: Database } {
       updated_at               TEXT NOT NULL
     );
   `);
+  _outbound.exec(ACTION_LOG_SCHEMA);
 
   return { inbound: _inbound, outbound: _outbound };
 }

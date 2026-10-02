@@ -1,5 +1,6 @@
 import { query as sdkQuery, type HookCallback, type PreCompactHookInput } from '@anthropic-ai/claude-agent-sdk';
 
+import { recordAction } from '../db/action-log.js';
 import { clearContainerToolInFlight, setContainerToolInFlight } from '../db/container-state.js';
 import type { MemorySessionHookRegistration } from '../memory/session-hook.js';
 import type { ResolvedRuntimeConfiguration } from '../provider-contracts/registry.js';
@@ -86,6 +87,7 @@ class MessageStream {
   private done = false;
 
   push(text: string): void {
+    recordAction({ event: 'prompt', data: { text } });
     this.queue.push({
       type: 'user',
       message: { role: 'user', content: text },
@@ -121,9 +123,21 @@ class MessageStream {
  * block the call here instead of letting the agent hang.
  */
 const preToolUseHook: HookCallback = async (input) => {
-  const i = input as { tool_name?: string; tool_input?: Record<string, unknown> };
+  const i = input as {
+    tool_name?: string;
+    tool_input?: Record<string, unknown>;
+    tool_use_id?: string;
+    agent_id?: string;
+  };
   const toolName = i.tool_name ?? '';
+  recordAction({
+    event: 'tool_start',
+    toolUseId: i.tool_use_id,
+    agentId: i.agent_id,
+    data: { tool: toolName, input: i.tool_input },
+  });
   if (SDK_DISALLOWED_TOOLS.includes(toolName)) {
+    recordAction({ event: 'tool_blocked', toolUseId: i.tool_use_id, agentId: i.agent_id, data: { tool: toolName } });
     return {
       decision: 'block',
       stopReason: `Tool '${toolName}' is not available in this environment — use the nanoclaw equivalent.`,
@@ -142,7 +156,26 @@ const preToolUseHook: HookCallback = async (input) => {
 };
 
 /** Clear in-flight tool on PostToolUse / PostToolUseFailure. */
-const postToolUseHook: HookCallback = async () => {
+const postToolUseHook: HookCallback = async (input) => {
+  const i = input as {
+    hook_event_name?: string;
+    tool_name?: string;
+    tool_use_id?: string;
+    agent_id?: string;
+    tool_response?: unknown;
+    error?: string;
+    is_interrupt?: boolean;
+    duration_ms?: number;
+  };
+  const failed = i.hook_event_name === 'PostToolUseFailure';
+  recordAction({
+    event: failed ? 'tool_error' : 'tool_end',
+    toolUseId: i.tool_use_id,
+    agentId: i.agent_id,
+    data: failed
+      ? { tool: i.tool_name, error: i.error, interrupted: i.is_interrupt === true, durationMs: i.duration_ms }
+      : { tool: i.tool_name, output: i.tool_response, durationMs: i.duration_ms },
+  });
   try {
     clearContainerToolInFlight();
   } catch (err) {
@@ -150,6 +183,41 @@ const postToolUseHook: HookCallback = async () => {
   }
   return { continue: true };
 };
+
+/** Subagent lifecycle: lets the log attribute nested tool calls to their subagent. */
+const subagentHook: HookCallback = async (input) => {
+  const i = input as {
+    hook_event_name?: string;
+    agent_id?: string;
+    agent_type?: string;
+    last_assistant_message?: string;
+  };
+  const stop = i.hook_event_name === 'SubagentStop';
+  recordAction({
+    event: stop ? 'subagent_stop' : 'subagent_start',
+    agentId: i.agent_id,
+    data: stop ? { type: i.agent_type, lastMessage: i.last_assistant_message } : { type: i.agent_type },
+  });
+  return { continue: true };
+};
+
+/**
+ * Assistant text and thinking blocks (tool_use blocks are covered by the tool
+ * hooks). `parent_tool_use_id` marks output produced inside a subagent.
+ */
+function recordAssistantContent(
+  message: { parent_tool_use_id?: string | null },
+  content: Array<{ type?: string; text?: string; thinking?: string }> | undefined,
+): void {
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    if (block.type === 'text' && block.text) {
+      recordAction({ event: 'assistant_text', toolUseId: message.parent_tool_use_id, data: { text: block.text } });
+    } else if (block.type === 'thinking' && block.thinking) {
+      recordAction({ event: 'thinking', toolUseId: message.parent_tool_use_id, data: { text: block.thinking } });
+    }
+  }
+}
 
 /** The real clock for archive names and rotation stamps; tests hand the history functions a fixed one. */
 const REAL_CLOCK = { now: () => Date.now() };
@@ -278,6 +346,8 @@ export class ClaudeProvider implements AgentProvider {
           PreToolUse: [{ hooks: [preToolUseHook] }],
           PostToolUse: [{ hooks: [postToolUseHook] }],
           PostToolUseFailure: [{ hooks: [postToolUseHook] }],
+          SubagentStart: [{ hooks: [subagentHook] }],
+          SubagentStop: [{ hooks: [subagentHook] }],
           PreCompact: [{ hooks: [createPreCompactHook(this.assistantName)] }],
         },
       },
@@ -295,6 +365,7 @@ export class ClaudeProvider implements AgentProvider {
         yield { type: 'activity' };
 
         if (message.type === 'system' && message.subtype === 'init') {
+          recordAction({ event: 'session_init', data: { continuation: message.session_id, model: message.model } });
           yield { type: 'init', continuation: message.session_id };
         } else if (message.type === 'assistant') {
           // Surface each assistant message's text as it streams in. The final
@@ -315,6 +386,7 @@ export class ClaudeProvider implements AgentProvider {
           // poll-loop's midTurnSent===0 fallback and wrap-nudge cover that.
           const content = (message as { message?: { content?: Array<{ type?: string; text?: string }> } }).message
             ?.content;
+          recordAssistantContent(message as { parent_tool_use_id?: string | null }, content);
           if (Array.isArray(content)) {
             const text = content
               .filter((block) => block.type === 'text' && block.text)
@@ -328,6 +400,25 @@ export class ClaudeProvider implements AgentProvider {
           // `errors[]` instead. Keep that actionable notice separate from
           // model output so the poll-loop can deliver it without scratchpad.
           const m = message as { result?: string; is_error?: boolean; errors?: string[] };
+          const r = message as {
+            subtype?: string;
+            duration_ms?: number;
+            num_turns?: number;
+            total_cost_usd?: number;
+            usage?: unknown;
+          };
+          recordAction({
+            event: 'turn_end',
+            data: {
+              subtype: r.subtype,
+              isError: m.is_error === true,
+              errors: m.errors,
+              durationMs: r.duration_ms,
+              numTurns: r.num_turns,
+              costUsd: r.total_cost_usd,
+              usage: r.usage,
+            },
+          });
           yield {
             type: 'result',
             text: m.result ?? null,

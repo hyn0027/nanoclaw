@@ -89,6 +89,29 @@ export interface MailboxTimelineMessage {
   content: string;
 }
 
+/** A messages_in / messages_out row as the action-log export copies it. */
+export interface MailboxActivityMessage {
+  seq: number;
+  id: string;
+  timestamp: string;
+  kind: string;
+  channelType: string | null;
+  platformId: string | null;
+  threadId: string | null;
+  content: string;
+}
+
+/** A runner-written action_log row (tool calls, subagents, assistant text). */
+export interface MailboxActionRow {
+  id: number;
+  timestamp: string;
+  event: string;
+  toolUseId: string | null;
+  agentId: string | null;
+  /** Serialized JSON payload, exactly as the runner wrote it. */
+  data: string;
+}
+
 /** Host-visible inbound mailbox behavior. Storage layout and lifecycle are implementation-private. */
 export interface InboundMailbox {
   setRouting(routing: SessionRouting): void;
@@ -130,6 +153,8 @@ export interface InboundMailbox {
   getInboundHistory(limit: number): MailboxHistoryMessage[];
   getConversationRoot(): MailboxTimelineMessage | undefined;
   findTaskBySeriesSlug(slug: string): TaskRecord | undefined;
+  /** Optional (action-log export): inbound rows with seq > afterSeq, ascending. */
+  getInboundAfterSeq?(afterSeq: number, limit: number): MailboxActivityMessage[];
 }
 
 /** Host-visible outbound mailbox behavior. Storage layout and lifecycle are implementation-private. */
@@ -142,6 +167,10 @@ export interface OutboundMailbox {
   writeDirect(message: DirectOutboundMessage): Promise<void>;
   getOutboundHistory(limit: number): MailboxHistoryMessage[];
   getTopLevelOutbound(limit: number): MailboxTimelineMessage[];
+  /** Optional (action-log export): outbound rows with seq > afterSeq, ascending. */
+  getOutboundAfterSeq?(afterSeq: number, limit: number): MailboxActivityMessage[];
+  /** Optional (action-log export): action_log rows with id > afterId, ascending; [] on pre-action-log DBs. */
+  getActionsAfter?(afterId: number, limit: number): MailboxActionRow[];
 }
 
 export interface MailboxSession extends InboundMailbox, OutboundMailbox {}

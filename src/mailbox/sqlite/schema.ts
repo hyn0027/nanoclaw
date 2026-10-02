@@ -79,4 +79,13 @@ CREATE TABLE IF NOT EXISTS container_state (
   tool_started_at          TEXT,
   updated_at               TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS action_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp   TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  tool_use_id TEXT,
+  agent_id    TEXT,
+  data        TEXT NOT NULL
+);
 `;

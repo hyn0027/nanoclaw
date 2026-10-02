@@ -172,6 +172,42 @@ function getTaskStats(db: Database.Database, seriesId: string): TaskStats {
   };
 }
 
+interface ActivitySqlRow {
+  seq: number;
+  id: string;
+  timestamp: string;
+  kind: string;
+  channel_type: string | null;
+  platform_id: string | null;
+  thread_id: string | null;
+  content: string;
+}
+
+function activityAfterSeq(
+  db: Database.Database,
+  table: 'messages_in' | 'messages_out',
+  afterSeq: number,
+  limit: number,
+) {
+  return (
+    db
+      .prepare(
+        `SELECT seq, id, timestamp, kind, channel_type, platform_id, thread_id, content
+           FROM ${table} WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
+      )
+      .all(afterSeq, limit) as ActivitySqlRow[]
+  ).map((row) => ({
+    seq: row.seq,
+    id: row.id,
+    timestamp: sqliteTimestamp(row.timestamp),
+    kind: row.kind,
+    channelType: row.channel_type,
+    platformId: row.platform_id,
+    threadId: row.thread_id,
+    content: row.content,
+  }));
+}
+
 export function wrapSqliteInbound(db: Database.Database, nextSequence = () => nextEvenAcross(db)): InboundMailbox {
   return {
     setRouting: (routing) => {
@@ -297,6 +333,7 @@ export function wrapSqliteInbound(db: Database.Database, nextSequence = () => ne
         .get(pattern) as TaskSqlRow | undefined;
       return row && taskRecord(row);
     },
+    getInboundAfterSeq: (afterSeq, limit) => activityAfterSeq(db, 'messages_in', afterSeq, limit),
   };
 }
 
@@ -416,6 +453,33 @@ export function wrapSqliteOutbound(
           )
           .all(limit) as MailboxTimelineMessage[]
       ).map((row) => ({ ...row, timestamp: sqliteTimestamp(row.timestamp) })),
+    getOutboundAfterSeq: (afterSeq, limit) => activityAfterSeq(readable(), 'messages_out', afterSeq, limit),
+    getActionsAfter: (afterId, limit) => {
+      const db = readable();
+      const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'action_log'").get();
+      if (!exists) return [];
+      return (
+        db
+          .prepare(
+            'SELECT id, timestamp, event, tool_use_id, agent_id, data FROM action_log WHERE id > ? ORDER BY id ASC LIMIT ?',
+          )
+          .all(afterId, limit) as Array<{
+          id: number;
+          timestamp: string;
+          event: string;
+          tool_use_id: string | null;
+          agent_id: string | null;
+          data: string;
+        }>
+      ).map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        event: row.event,
+        toolUseId: row.tool_use_id,
+        agentId: row.agent_id,
+        data: row.data,
+      }));
+    },
   };
 }
 
