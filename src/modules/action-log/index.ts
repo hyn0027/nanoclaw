@@ -69,6 +69,8 @@ onHostStart(() => {
 });
 
 onHostShutdown(async () => {
+  // Never started (disabled, or shut down before host start, e.g. during crash backoff): nothing to flush.
+  if (!running) return;
   running = false;
   for (const t of timers) clearTimeout(t);
   timers.clear();
