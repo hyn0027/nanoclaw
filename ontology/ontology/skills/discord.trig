@@ -1,0 +1,141 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_discord {
+  ar:skill_discord a ar:Skill ;
+    ar:skillDirectory "discord" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/agent-risk/top_skills/discord/SKILL.md" ;
+    ar:sourceSha256 "29897610e192ee367f0117dd992147dd7fe417820b79ad01329838f537019508" ;
+    ar:requiresOntologyModule "nanoclaw-messaging", "nanoclaw-control",
+      "nanoclaw-runtime", "freeform-internet" ;
+    ar:subjectToControlKind ar:NanoClawDestinationACL,
+      ar:RemoteServiceAuthorizationControl, ar:NanoClawContainerIsolationControl,
+      ar:NanoClawMountModeControl, ar:NanoClawMountAllowlistControl ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_discord_send, ar:adapt_discord_media,
+      ar:adapt_discord_edit, ar:adapt_discord_react,
+      ar:adapt_discord_unsupported_actions ;
+    ar:sourceNote "NanoClaw-native subset: send text, send files, edit messages, and add reactions through separate built-in MCP tools. Unsupported broad message-tool actions are intentionally omitted." ;
+    ar:declaresOperation ar:op_discord_send, ar:op_discord_send_media,
+      ar:op_discord_edit, ar:op_discord_react .
+
+  ar:DiscordAdapterInbound a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawChannelAdapterInbound ;
+    ar:routesToKind ar:DiscordService, ar:NanoClawHostRouterInvocation .
+  ar:DiscordAdapterDelivery a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawChannelAdapterDelivery ;
+    ar:routesToKind ar:DiscordService .
+  ar:NanoClawHostDeliveryInvocation ar:routesToKind ar:DiscordAdapterDelivery .
+
+  ar:DiscordService a ar:WorldSurfaceKind ; ar:specializesKind ar:MessagingPlatform .
+  ar:DiscordAPIEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint ;
+    rdfs:comment "The adapter's public Discord service endpoint; the skill does not pin a URL, protocol version, or route." .
+  ar:DiscordGuild a ar:WorldSurfaceKind ; ar:specializesKind ar:MessagingGroup .
+  ar:DiscordChannel a ar:WorldSurfaceKind ; ar:specializesKind ar:MessagingGroup .
+  ar:DiscordDirectMessage a ar:WorldSurfaceKind ; ar:specializesKind ar:MessagingGroup .
+  ar:DiscordChannel ar:protectedByKind ar:RemoteServiceAuthorizationControl .
+  ar:DiscordDirectMessage ar:protectedByKind ar:RemoteServiceAuthorizationControl .
+  ar:DiscordUser a ar:WorldSurfaceKind .
+  ar:DiscordMessage a ar:WorldSurfaceKind ; ar:specializesKind ar:MessagingMessage .
+  ar:DiscordMedia a ar:WorldSurfaceKind .
+  ar:DiscordReaction a ar:WorldSurfaceKind .
+  ar:DiscordService ar:containsKind ar:DiscordGuild, ar:DiscordDirectMessage .
+  ar:DiscordGuild ar:containsKind ar:DiscordChannel, ar:DiscordUser .
+  ar:DiscordChannel ar:containsKind ar:DiscordMessage .
+  ar:DiscordMessage ar:containsKind ar:DiscordMedia, ar:DiscordReaction .
+
+  ar:cond_discord_adapter_registered a ar:Requirement .
+  ar:cond_discord_destination_projected a ar:Requirement .
+  ar:cond_discord_target_permission a ar:Requirement .
+  ar:cond_message_id a ar:Requirement .
+  ar:cond_media_path_in_outbox_scope a ar:Requirement .
+
+  ar:op_discord_send a ar:Operation ; ar:invokedThroughKind ar:NanoClawSendMessageTool ;
+    ar:mayInitiateInternetCall ar:call_discord_send ;
+    ar:targetsKind ar:DiscordChannel, ar:DiscordDirectMessage ;
+    ar:requires ar:cond_discord_adapter_registered, ar:cond_discord_destination_projected,
+      ar:cond_discord_target_permission ; ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:sourceNote "NanoClaw addresses a projected destination name rather than passing channel=discord and a raw channel/user target on every call." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:DiscordMessage ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:DiscordChannel, ar:DiscordDirectMessage ] .
+
+  ar:op_discord_send_media a ar:Operation ; ar:invokedThroughKind ar:NanoClawSendFileTool ;
+    ar:requires ar:cond_container_file_readable ;
+    ar:mayInitiateInternetCall ar:call_discord_media ;
+    ar:targetsKind ar:LocalFile, ar:NanoClawOutboxArtifact, ar:DiscordChannel ;
+    ar:requires ar:cond_discord_adapter_registered, ar:cond_discord_destination_projected,
+      ar:cond_discord_target_permission, ar:cond_media_path_in_outbox_scope ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:sourceNote "NanoClaw stages the file under /workspace/outbox before mailbox delivery; an arbitrary file:// media reference is not the native contract." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:LocalFile ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawOutboxArtifact ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:DiscordMedia, ar:DiscordChannel ] .
+
+  ar:op_discord_edit a ar:Operation ; ar:invokedThroughKind ar:NanoClawEditMessageTool ;
+    ar:mayInitiateInternetCall ar:call_discord_edit ;
+    ar:targetsKind ar:DiscordMessage ;
+    ar:requires ar:cond_discord_adapter_registered, ar:cond_discord_destination_projected,
+      ar:cond_message_id, ar:cond_discord_target_permission ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:DiscordMessage ] .
+
+  ar:op_discord_react a ar:Operation ; ar:invokedThroughKind ar:NanoClawAddReactionTool ;
+    ar:mayInitiateInternetCall ar:call_discord_react ;
+    ar:targetsKind ar:DiscordMessage ;
+    ar:requires ar:cond_discord_adapter_registered, ar:cond_discord_destination_projected,
+      ar:cond_message_id, ar:cond_discord_target_permission ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:DiscordReaction ] .
+
+  ar:call_discord_send a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawHostProcess ; ar:callViaKind ar:DiscordAdapterDelivery ;
+    ar:callEndpointKind ar:DiscordAPIEndpoint ; ar:callStage ar:HostAdapterEgress ;
+    ar:sourceStatus ar:InferredForNanoClaw ; ar:sourceNote "Only the host adapter's subsequent delivery qualifies; the tool call and outbound mailbox write remain local. Exact Discord API address is adapter-dependent." .
+  ar:call_discord_media a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawHostProcess ; ar:callViaKind ar:DiscordAdapterDelivery ;
+    ar:callEndpointKind ar:DiscordAPIEndpoint ; ar:callStage ar:HostAdapterEgress ;
+    ar:sourceStatus ar:InferredForNanoClaw ; ar:sourceNote "The local file is staged first; upload/delivery by the host adapter may involve more than one HTTP request." .
+  ar:call_discord_edit a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawHostProcess ; ar:callViaKind ar:DiscordAdapterDelivery ;
+    ar:callEndpointKind ar:DiscordAPIEndpoint ; ar:callStage ar:HostAdapterEgress ;
+    ar:sourceStatus ar:InferredForNanoClaw ; ar:sourceNote "Host adapter performs the platform edit after local mailbox mediation, conditional on adapter and platform support." .
+  ar:call_discord_react a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawHostProcess ; ar:callViaKind ar:DiscordAdapterDelivery ;
+    ar:callEndpointKind ar:DiscordAPIEndpoint ; ar:callStage ar:HostAdapterEgress ;
+    ar:sourceStatus ar:InferredForNanoClaw ; ar:sourceNote "Host adapter performs the platform reaction after local mailbox mediation, conditional on adapter and platform support." .
+
+  ar:adapt_discord_send a ar:AdaptationMapping ;
+    ar:sourceAssumption "Send text." ;
+    ar:nanoclawModel "NanoClawSendMessageTool." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "The call is addressed by projected destination name rather than channel=discord plus a raw target." ;
+    ar:adaptedOperation ar:op_discord_send .
+
+  ar:adapt_discord_media a ar:AdaptationMapping ;
+    ar:sourceAssumption "Send media from file://... ." ;
+    ar:nanoclawModel "NanoClawSendFileTool and a NanoClaw outbox artifact." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "The endpoint is native but uses a different staging contract." ;
+    ar:adaptedOperation ar:op_discord_send_media .
+
+  ar:adapt_discord_edit a ar:AdaptationMapping ;
+    ar:sourceAssumption "Edit a message." ;
+    ar:nanoclawModel "NanoClawEditMessageTool." ;
+    ar:adaptationDisposition ar:NativeAdaptation, ar:ConditionalAdaptation ;
+    ar:semanticDifference "Execution remains subject to adapter support and platform permission." ;
+    ar:adaptedOperation ar:op_discord_edit .
+
+  ar:adapt_discord_react a ar:AdaptationMapping ;
+    ar:sourceAssumption "React to a message." ;
+    ar:nanoclawModel "NanoClawAddReactionTool." ;
+    ar:adaptationDisposition ar:NativeAdaptation, ar:ConditionalAdaptation ;
+    ar:semanticDifference "Execution remains subject to adapter support and platform permission." ;
+    ar:adaptedOperation ar:op_discord_react .
+
+  ar:adapt_discord_unsupported_actions a ar:AdaptationMapping ;
+    ar:sourceAssumption "Read, search, delete, poll, pin, create thread, and set presence." ;
+    ar:nanoclawModel "Omitted from the skill graph." ;
+    ar:adaptationDisposition ar:UnsupportedAdaptation ;
+    ar:semanticDifference "NanoClaw's inspected built-in messaging MCP lacks these actions. They require a new built-in endpoint, an added MCP server, or adapter-specific tooling. Inbound messages can arrive as turn context, but that is not arbitrary history read/search." .
+}

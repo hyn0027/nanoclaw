@@ -25,4 +25,5 @@ import './permissions/index.js';
 import './agent-to-agent/index.js';
 import './self-mod/index.js';
 import './action-log/index.js';
+import './ontology-runtime/index.js';
 import './community-portal/index.js';

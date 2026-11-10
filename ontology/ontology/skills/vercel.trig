@@ -1,0 +1,88 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Vercel as the skills that deploy there see it: the CLI in the container, the API
+# it talks to through the OneCLI gateway, and the Vercel account it changes.
+# Containment (ar:containsKind) is ownership: deleting the container removes what
+# it contains. Shared by vercel-cli and frontend-engineer; declares no operations.
+ar:g_vercel {
+  ar:VercelModule a ar:OntologyModule ;
+    ar:ontologyModuleId "vercel" ;
+    ar:requiresOntologyModule "freeform-internet", "shell-execution", "local-filesystem",
+      "nanoclaw-runtime", "nanoclaw-network" ;
+    rdfs:comment "Support vocabulary for skills that use the Vercel CLI: the CLI, api.vercel.com, the Vercel account's entities and what Vercel does on its own when they change. Not a skill; declares no operations." .
+
+  # ── In the container ──────────────────────────────────────────────────────
+  ar:VercelCLI a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ShellCommandExecution ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:routesToKind ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "The vercel CLI, installed only by NanoClaw's /add-vercel skill; its token is the placeholder 'placeholder', replaced by OneCLI for api.vercel.com." .
+  ar:VercelLinkedProjectDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "A local source tree the CLI deploys from; vercel link writes .vercel/project.json into it." .
+  ar:VercelLocalEnvFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "The .env file vercel env pull writes: the project's environment variable values, decrypted, in plain text." .
+  ar:VercelLinkedProjectDirectory ar:mayResideInKind ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace, ar:NanoClawContainerLayer .
+  ar:VercelLocalEnvFile ar:mayResideInKind ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace, ar:NanoClawContainerLayer .
+  ar:VercelLinkedProjectDirectory ar:containsKind ar:VercelLocalEnvFile .
+
+  ar:cond_vercel_cli_installed a ar:Requirement ;
+    ar:requiresContainerCommand "vercel" ;
+    rdfs:comment "The vercel CLI is in the agent image, i.e. /add-vercel was applied (not in the stock image)." .
+  ar:cond_vercel_credential a ar:Requirement ;
+    ar:requiresCredentialForHost "api.vercel.com" ;
+    rdfs:comment "OneCLI holds a Vercel token for api.vercel.com that applies to this agent." .
+
+  ar:call_vercel_api a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ;
+    ar:callViaKind ar:VercelCLI, ar:NanoClawProxyAwareHTTPRequest ;
+    ar:callEndpointKind ar:VercelAPIEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://api.vercel.com/" ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Every vercel subcommand calls the REST API; the gateway swaps the placeholder token for the stored Vercel credential." .
+  ar:call_vercel_site_load a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ;
+    ar:callViaKind ar:NanoClawProxyAwareHTTPRequest ;
+    ar:callEndpointKind ar:UnspecifiedPublicInternetEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://*.vercel.app/" ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Loading a deployed site at its public Vercel URL (*.vercel.app; a custom domain added with vercel domains is not covered by this pattern)." .
+
+  # ── At Vercel ─────────────────────────────────────────────────────────────
+  ar:VercelAPIEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint ;
+    rdfs:comment "Vercel's REST API (api.vercel.com)." .
+  ar:VercelResource a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteService ;
+    ar:protectedByKind ar:RemoteServiceAuthorizationControl ;
+    rdfs:comment "Anything stored at Vercel for an account; access is whatever the token's scope (personal account or team) allows." .
+  ar:VercelAccount a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource ;
+    rdfs:comment "The personal account or team the token acts for: its projects, domains, and plan limits." .
+  ar:VercelProject a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource ;
+    rdfs:comment "A project: build settings, Git connection, environment variables, deployments, and assigned domains." .
+  ar:VercelDeployment a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource, ar:RemoteWebResource ;
+    rdfs:comment "An immutable deployment of uploaded files, published at a public URL; --prod makes it the project's production deployment." .
+  ar:VercelBuild a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource ;
+    rdfs:comment "The build of a deployment on Vercel's build machines: runs the project's install and build commands with its environment variables." .
+  ar:VercelEnvironmentVariable a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource ;
+    rdfs:comment "A project environment variable for production, preview, or development, given to builds and functions." .
+  ar:VercelDomain a ar:WorldSurfaceKind ; ar:specializesKind ar:VercelResource ;
+    rdfs:comment "A domain on the account; assigned to a project, it serves the project's production deployment." .
+
+  ar:VercelAccount ar:containsKind ar:VercelProject, ar:VercelDomain .
+  ar:VercelProject ar:containsKind ar:VercelDeployment, ar:VercelEnvironmentVariable .
+  ar:VercelDeployment ar:containsKind ar:VercelBuild .
+  ar:VercelDomain ar:referencesKind ar:VercelProject .
+
+  # ── What Vercel does on its own (ar:mayTrigger) ───────────────────────────
+  ar:VercelDeployment ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:VercelBuild ; rdfs:comment "the deployment is built from the uploaded files" ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Update ; ar:affectsKind ar:VercelDomain ; rdfs:comment "a production deployment takes over the project's domains" ] .
+  ar:VercelBuild ar:mayTrigger
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Read ; ar:affectsKind ar:VercelEnvironmentVariable ; rdfs:comment "builds get the project's environment variables" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Transmit ; ar:affectsKind ar:RemoteNetworkEndpoint ; rdfs:comment "build commands reach the Internet from Vercel's machines, outside the OneCLI gateway" ] .
+  ar:VercelDomain ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Update ; ar:affectsKind ar:VercelProject ; rdfs:comment "the domain serves the project's production deployment" ] .
+}

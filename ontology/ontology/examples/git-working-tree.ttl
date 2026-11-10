@@ -1,0 +1,9 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix ex: <urn:agent-risk:example:> .
+
+ex:projectDirectory a ar:LocalDirectory ;
+  ar:containsEntry ex:dotGit ;
+  ar:gitRepositoryValidated true .
+
+ex:dotGit a ar:FileSystemEntry ;
+  ar:entryName ".git" .

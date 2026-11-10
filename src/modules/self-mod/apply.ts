@@ -27,6 +27,8 @@ import { log } from '../../log.js';
 import { writeSessionMessage } from '../../session-manager.js';
 import type { Session } from '../../types.js';
 import { notifyAgent } from '../approvals/index.js';
+import { describeInstalled } from './package-lock.js';
+import { mergePackages } from './packages.js';
 
 async function wakeSessionById(sessionId: string): Promise<void> {
   const session = await getSession(sessionId);
@@ -52,20 +54,22 @@ export async function applyInstallPackages(payload: Record<string, unknown>, ses
     return;
   }
 
-  // Append new packages to existing lists in the DB (deduplicated)
+  // Add to the lists in the DB; a spec replaces an earlier entry for the same package (a pin can change)
   if (payload.apt) {
     const existing = JSON.parse(configRow.packages_apt) as string[];
-    for (const pkg of payload.apt as string[]) {
-      if (!existing.includes(pkg)) existing.push(pkg);
-    }
-    await updateContainerConfigJson(agentGroup.id, 'packages_apt', existing);
+    await updateContainerConfigJson(
+      agentGroup.id,
+      'packages_apt',
+      mergePackages('apt', existing, payload.apt as string[]),
+    );
   }
   if (payload.npm) {
     const existing = JSON.parse(configRow.packages_npm) as string[];
-    for (const pkg of payload.npm as string[]) {
-      if (!existing.includes(pkg)) existing.push(pkg);
-    }
-    await updateContainerConfigJson(agentGroup.id, 'packages_npm', existing);
+    await updateContainerConfigJson(
+      agentGroup.id,
+      'packages_npm',
+      mergePackages('npm', existing, payload.npm as string[]),
+    );
   }
 
   const pkgs = [
@@ -74,7 +78,8 @@ export async function applyInstallPackages(payload: Record<string, unknown>, ses
   ].join(', ');
   log.info('Package install approved', { agentGroupId: session.agent_group_id });
   try {
-    await buildAgentGroupImage(session.agent_group_id);
+    const record = await buildAgentGroupImage(session.agent_group_id);
+    const installed = record ? describeInstalled(record) : '';
     await writeSessionMessage(session.agent_group_id, session.id, {
       id: `appr-note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind: 'chat',
@@ -83,7 +88,7 @@ export async function applyInstallPackages(payload: Record<string, unknown>, ses
       channelType: 'agent',
       threadId: null,
       content: JSON.stringify({
-        text: `Packages installed (${pkgs}) and container rebuilt. Verify the new packages are available (e.g. run them or check versions) and report the result to the user.`,
+        text: `Packages installed (${pkgs}) and container rebuilt.${installed ? ` Installed versions: ${installed}.` : ''} Verify the new packages are available (e.g. run them or check versions) and report the result to the user.`,
         sender: 'system',
         senderId: 'system',
       }),

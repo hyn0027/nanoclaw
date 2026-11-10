@@ -1,0 +1,65 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_container_tooling {
+  ar:ContainerToolingModule a ar:OntologyModule ;
+    ar:ontologyModuleId "container-tooling" ;
+    ar:requiresOntologyModule "local-filesystem", "freeform-internet", "shell-execution",
+      "nanoclaw-runtime", "nanoclaw-network" ;
+    rdfs:comment "Support vocabulary shared by NanoClaw's container skills: the agent-browser CLI and its browser state, and package managers run from the container shell. Not a skill; declares no operations." .
+
+  # ── agent-browser: headless Chromium driven from the container shell ──────
+  ar:AgentBrowserCLI a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ShellCommandExecution ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:routesToKind ar:AgentBrowserSession, ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "The agent-browser CLI baked into the agent image (Chromium at /usr/bin/chromium). Each command drives one persistent headless browser in the container; page loads leave through the proxy when Chromium honors it, or are blocked under egress lockdown when it does not." .
+  ar:AgentBrowserSession a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawContainerProcess ;
+    rdfs:comment "The running headless browser: open pages, history, cookies, and storage for the session's lifetime." .
+  ar:BrowserPage a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteWebResource ;
+    rdfs:comment "A page loaded in the browser, including its DOM and scripts." .
+  ar:BrowserRemoteAppState a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteService ;
+    rdfs:comment "Server-side state of a website changed by browser interaction (form submissions, button clicks, uploads)." .
+  ar:BrowserSiteAccount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteWebsiteAccount ;
+    rdfs:comment "A website account the browser logs into with credentials typed into a form." .
+  ar:BrowserCookieJar a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "Cookies and local/session storage held by the running browser; may contain live session tokens." .
+  ar:BrowserAuthStateFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Saved browser state (state save/load): cookies and storage as plain JSON, i.e. reusable session credentials on disk." .
+  ar:BrowserCapture a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Screenshot or PDF written by the browser." .
+  ar:AgentBrowserSession ar:containsKind ar:BrowserPage, ar:BrowserCookieJar .
+  ar:BrowserAuthStateFile ar:mayResideInKind ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace, ar:NanoClawContainerLayer .
+  ar:BrowserCapture ar:mayResideInKind ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace, ar:NanoClawContainerLayer .
+  ar:BrowserAuthStateFile ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:BrowserSiteAccount ar:protectedByKind ar:RemoteServiceAuthorizationControl .
+
+  ar:cond_agent_browser_available a ar:Requirement ;
+    ar:requiresContainerCommand "agent-browser" ;
+    rdfs:comment "The agent-browser CLI and Chromium are present in the agent image (true for the stock NanoClaw image)." .
+  ar:cond_browser_proxy_honored a ar:Requirement ;
+    rdfs:comment "Chromium sends its traffic through the gateway proxy; under egress lockdown a browser that ignores the proxy reaches nothing." .
+
+  # ── Package managers run from the container shell ─────────────────────────
+  ar:PackageManagerCLI a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ShellCommandExecution ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:routesToKind ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "pnpm / npm / npx run in the container. Installs download and run third-party package code (including install scripts) inside the container." .
+  ar:PackageRegistryEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint ;
+    rdfs:comment "Public npm package registry (registry.npmjs.org by default)." .
+  ar:InstalledPackageTree a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "node_modules and lockfile produced by a package install, including executable third-party code." .
+  ar:InstalledPackageTree ar:mayResideInKind ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace, ar:NanoClawContainerLayer .
+  ar:cond_package_registry_reachable a ar:Requirement ;
+    rdfs:comment "The package registry host is reachable through the gateway (or directly when lockdown is off) and not blocked by gateway policy." .
+}

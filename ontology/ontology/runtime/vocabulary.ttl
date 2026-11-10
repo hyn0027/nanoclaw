@@ -1,0 +1,52 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rt: <urn:agent-risk:runtime:> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Terms for runtime expansions: what one NanoClaw session's ontology adds on top of
+# the base model (ontology/universal, nanoclaw, claude, skills, mcp), and where each
+# addition came from. The base files are never edited at runtime; every addition is
+# a named graph in data/v2-sessions/<group>/<session>/ontology/expansions/.
+
+rt:RuntimeVocabulary a owl:Ontology ;
+  rdfs:comment "Provenance and linking terms for per-session runtime ontology expansions." .
+
+rt:Expansion a rdfs:Class ;
+  rdfs:comment "One expansion step of a session ontology: the graph it adds, why, and from which evidence." .
+rt:expansionId a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string .
+rt:ontologyId a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string ;
+  rdfs:comment "The session ontology this expansion belongs to (ont-<session id>)." .
+rt:previousExpansion a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string .
+rt:trigger a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string ;
+  rdfs:comment "What set the expansion off: traffic, skill:<name>, mcp:<name>, package:<manager>:<name>." .
+rt:fromCall a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "Id of a gateway-captured call (OneCLI GATEWAY_CAPTURE_DIR record) that is evidence for the subject." .
+rt:createdAt a rdf:Property ; rdfs:range xsd:dateTime .
+rt:generatedBy a rdf:Property ; rdfs:range xsd:string ; rdfs:comment "The model that proposed the expansion." .
+rt:summary a rdf:Property ; rdfs:range xsd:string .
+rt:addedBy a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "On any added kind, relation node, operation, or instance: the expansion id that added it." .
+
+rt:ObservedTraffic a ar:EvidenceStatus ;
+  rdfs:label "observed in the agent's own gateway traffic" ;
+  rdfs:comment "Proposed by the runtime expander from request and response bodies the gateway saw. A may-claim grounded in data the environment returned, not a verified model." .
+rt:ProposedFromSource a ar:EvidenceStatus ;
+  rdfs:label "proposed at runtime from a skill, MCP server, or package with no reviewed ontology" ;
+  rdfs:comment "Drafted by the runtime expander from SKILL.md, MCP tool listings, or package knowledge; unreviewed." .
+
+rt:correspondsToKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Instances of the two kinds can denote the same real-world thing seen through different environments (a GitHub user's email and a Gmail address). Neither subtype nor containment." .
+rt:attribute a rdf:Property ; rdfs:comment "An observed attribute of a runtime instance (node with rt:key and rt:value)." .
+rt:key a rdf:Property ; rdfs:range xsd:string .
+rt:value a rdf:Property ; rdfs:range xsd:string .
+rt:instanceIn a rdf:Property ; rdfs:comment "The instance that contains this one (a repository's issue in its repository)." .
+rt:relatedInstance a rdf:Property ;
+  rdfs:comment "Node linking two runtime instances: rt:relation (references, delivers_to, member_of, owned_by, same_as, ...), rt:target, rdfs:comment." .
+rt:relation a rdf:Property ; rdfs:range xsd:string .
+rt:target a rdf:Property .
+rt:runtimeNote a rdf:Property ; rdfs:comment "A note an expansion adds about an existing kind (node with rdfs:comment and provenance)." .
+rt:correspondence a rdf:Property ; rdfs:comment "Node behind an rt:correspondsToKind link: rt:target, rdfs:comment, provenance." .
+rt:handlerInstance a rdf:Property ;
+  rdfs:comment "On an ar:mayTrigger node added at runtime: the specific instance that subscribes to the event (one web hook, one list), when the evidence names it." .

@@ -20,6 +20,7 @@ import { getContainerConfig } from '../../db/container-configs.js';
 import { log } from '../../log.js';
 import type { Session } from '../../types.js';
 import { notifyAgent, requestApproval } from '../approvals/index.js';
+import { validatePackages } from './packages.js';
 
 export async function validateInstallPackages(content: Record<string, unknown>, session: Session): Promise<boolean> {
   const agentGroup = await getAgentGroup(session.agent_group_id);
@@ -31,27 +32,10 @@ export async function validateInstallPackages(content: Record<string, unknown>, 
   const apt = (content.apt as string[]) || [];
   const npm = (content.npm as string[]) || [];
 
-  const APT_RE = /^[a-z0-9][a-z0-9._+-]*$/;
-  const NPM_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
-  const MAX_PACKAGES = 20;
-  if (apt.length + npm.length === 0) {
-    await notifyAgent(session, 'install_packages failed: at least one apt or npm package is required.');
-    return false;
-  }
-  if (apt.length + npm.length > MAX_PACKAGES) {
-    await notifyAgent(session, `install_packages failed: max ${MAX_PACKAGES} packages per request.`);
-    return false;
-  }
-  const invalidApt = apt.find((p) => !APT_RE.test(p));
-  if (invalidApt) {
-    await notifyAgent(session, `install_packages failed: invalid apt package name "${invalidApt}".`);
-    log.warn('install_packages: invalid apt package rejected', { pkg: invalidApt });
-    return false;
-  }
-  const invalidNpm = npm.find((p) => !NPM_RE.test(p));
-  if (invalidNpm) {
-    await notifyAgent(session, `install_packages failed: invalid npm package name "${invalidNpm}".`);
-    log.warn('install_packages: invalid npm package rejected', { pkg: invalidNpm });
+  const problem = validatePackages(apt, npm);
+  if (problem) {
+    await notifyAgent(session, `install_packages failed: ${problem}.`);
+    log.warn('install_packages: request rejected', { problem });
     return false;
   }
   return true;

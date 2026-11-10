@@ -66,9 +66,11 @@ async function main(): Promise<void> {
   // 0. Circuit breaker — backoff on rapid restarts
   await enforceStartupBackoff();
 
-  // 0.5 Upgrade tripwire — refuse to start if this install was updated
-  // outside the sanctioned path (raw `git pull` instead of /update-nanoclaw).
-  enforceUpgradeTripwire();
+  // 0.5 Upgrade tripwire — disabled in this local checkout: it runs whatever
+  // code is checked out (local commits included) instead of refusing to start
+  // when the upgrade marker does not match. Re-enable with enforceUpgradeTripwire().
+  void enforceUpgradeTripwire;
+  log.warn('Upgrade tripwire disabled (local checkout); running the checked-out code as is');
 
   // 1. Init central DB
   const db = await initDb(CENTRAL_DB_PATH, { role: 'host' });

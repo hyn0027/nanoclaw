@@ -1,0 +1,136 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_vercel_cli {
+  ar:skill_vercel_cli a ar:Skill ;
+    ar:skillDirectory "vercel-cli" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/nanoclaw/container/skills/vercel-cli/SKILL.md" ;
+    ar:sourceSha256 "cf2d1ca3a15e3f65fcc76d5604c781ac27e683cea4507da99ab2f983ede0b250" ;
+    ar:requiresOntologyModule "vercel", "container-tooling", "nanoclaw-core", "nanoclaw-runtime",
+      "nanoclaw-network", "nanoclaw-control", "nanoclaw-messaging", "freeform-internet",
+      "shell-execution", "local-filesystem" ;
+    ar:subjectToControlKind ar:NanoClawEgressLockdownControl, ar:OneCLIGatewayPolicy,
+      ar:NanoClawContainerIsolationControl, ar:NanoClawMountModeControl,
+      ar:NanoClawProviderToolPolicyControl, ar:NanoClawDestinationACL,
+      ar:RemoteServiceAuthorizationControl ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_vercel_cli_installed, ar:adapt_vercel_cli_token,
+      ar:adapt_vercel_cli_delegate ;
+    ar:sourceNote "NanoClaw container skill (container/skills/vercel-cli), copied in by /add-vercel. Deploys and manages Vercel projects, domains, and environment variables with the vercel CLI (token placeholder replaced by OneCLI); delegates building websites to a Frontend Engineer agent." ;
+    ar:declaresOperation ar:op_vercel_whoami, ar:op_vercel_build_local, ar:op_vercel_deploy,
+      ar:op_vercel_inspect, ar:op_vercel_verify_live, ar:op_vercel_link, ar:op_vercel_domain_add,
+      ar:op_vercel_env_pull, ar:op_vercel_env_add, ar:op_vercel_delegate_frontend .
+
+  ar:op_vercel_whoami a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelAccount ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel whoami --token placeholder before any Vercel operation." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelAccount ] .
+
+  ar:op_vercel_build_local a ar:Operation ; ar:invokedThroughKind ar:PackageManagerCLI ;
+    ar:targetsKind ar:VercelLinkedProjectDirectory ;
+    ar:requires ar:cond_container_shell_available, ar:cond_container_file_writable ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "npm run build (or pnpm run build) before deploying." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Execute ; ar:affectsKind ar:NanoClawContainerProcess ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:VercelLinkedProjectDirectory ] .
+
+  ar:op_vercel_deploy a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelDeployment ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel deploy --yes [--prod] --token placeholder [--cwd <dir>]: uploads the project and creates a preview or production deployment, prompts skipped." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelLinkedProjectDirectory ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:VercelLinkedProjectDirectory ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:VercelDeployment ] .
+
+  ar:op_vercel_inspect a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelDeployment, ar:VercelProject, ar:VercelDomain ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel inspect <url>, vercel ls, vercel project ls, vercel domains ls." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelDeployment ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelProject ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelDomain ] .
+
+  ar:op_vercel_verify_live a ar:Operation ; ar:invokedThroughKind ar:NanoClawContainerShellExecution ;
+    ar:targetsKind ar:VercelDeployment ;
+    ar:requires ar:cond_container_shell_available, ar:cond_network_client_available, ar:cond_network_route_permitted ;
+    ar:mayInitiateInternetCall ar:call_vercel_site_load ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "curl -sI <url> | head -1 expects a 2xx/3xx before the URL is shared." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelDeployment ] .
+
+  ar:op_vercel_link a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelProject, ar:VercelLinkedProjectDirectory ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available,
+      ar:cond_container_file_writable ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel link --yes: links the directory to an existing project, or creates one when none matches." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelProject ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:VercelProject ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:VercelLinkedProjectDirectory ] .
+
+  ar:op_vercel_domain_add a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelDomain ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel domains add example.com: adds a domain to the current project." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:VercelDomain ] .
+
+  ar:op_vercel_env_pull a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelEnvironmentVariable, ar:VercelLocalEnvFile ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available,
+      ar:cond_container_file_writable ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "vercel env pull: writes the project's environment variables to a local .env." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VercelEnvironmentVariable ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:VercelLocalEnvFile ] .
+
+  ar:op_vercel_env_add a ar:Operation ; ar:invokedThroughKind ar:VercelCLI ;
+    ar:targetsKind ar:VercelEnvironmentVariable ;
+    ar:requires ar:cond_vercel_cli_installed, ar:cond_vercel_credential, ar:cond_container_shell_available ;
+    ar:mayInitiateInternetCall ar:call_vercel_api ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "echo value | vercel env add NAME production: sets a variable for later builds and functions." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:VercelEnvironmentVariable ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:VercelEnvironmentVariable ] .
+
+  ar:op_vercel_delegate_frontend a ar:Operation ;
+    ar:invokedThroughKind ar:NanoClawCreateAgentTool, ar:NanoClawSendMessageTool ;
+    ar:targetsKind ar:NanoClawAgentGroup, ar:NanoClawDestinationGrant, ar:NanoClawProjectedDestination ;
+    ar:requires ar:cond_builtin_messaging_tool_available, ar:cond_create_agent_permitted,
+      ar:cond_destination_projected_and_authorized ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Building a site is delegated: create_agent 'Frontend Engineer' (unless the destination exists), then send_message with the full build request." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawAgentGroup ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawDestinationGrant ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Delegate ; ar:affectsKind ar:NanoClawAgentGroup ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawInboundMessage ] .
+
+  ar:adapt_vercel_cli_installed a ar:AdaptationMapping ;
+    ar:sourceAssumption "The vercel CLI is on PATH." ;
+    ar:nanoclawModel "Pinned in container/cli-tools.json and installed into the image by /add-vercel; absent from the stock image." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "Every Vercel operation is unavailable until the image is rebuilt with the CLI." ;
+    ar:adaptedOperation ar:op_vercel_deploy .
+  ar:adapt_vercel_cli_token a ar:AdaptationMapping ;
+    ar:sourceAssumption "The CLI is authenticated with a Vercel token." ;
+    ar:nanoclawModel "--token placeholder on every command; the OneCLI gateway injects the stored token for api.vercel.com, and its Cedar policy decides which API requests pass." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "The token never enters the container, but whatever the token's scope allows is reachable for requests the gateway permits; deploys, domain and env changes need no approval in the skill itself." ;
+    ar:adaptedOperation ar:op_vercel_whoami .
+  ar:adapt_vercel_cli_delegate a ar:AdaptationMapping ;
+    ar:sourceAssumption "A Frontend Engineer agent builds websites." ;
+    ar:nanoclawModel "create_agent makes a persistent agent group with a two-way destination pair; send_message hands it the request." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "The created agent outlives the request and has its own workspace and skills, including frontend-engineer." ;
+    ar:adaptedOperation ar:op_vercel_delegate_frontend .
+}

@@ -1,0 +1,388 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_nanoclaw_runtime {
+  ar:NanoClawHostFileSystem a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFileSystem ;
+    ar:protectedByKind ar:LocalFilesystemAccessControl ;
+    rdfs:comment "Host filesystem; a container cannot access arbitrary host paths merely because this kind exists." .
+  ar:NanoClawContainerFileSystem a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFileSystem ;
+    rdfs:comment "Filesystem namespace visible inside one session container, including container layers and explicit mounts." .
+  ar:NanoClawMount a ar:WorldSurfaceKind ;
+    rdfs:comment "Host-to-container exposure. Concrete runtime mode and source path must be inventoried per session." .
+  ar:NanoClawReadOnlyMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawMount .
+  ar:NanoClawReadWriteMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawMount .
+  ar:NanoClawFixedMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawMount .
+  ar:NanoClawAdditionalMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawMount .
+  ar:NanoClawSessionWorkspace a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Read-write /workspace session directory (host data/v2-sessions/<agent-group>/<session>) holding both mailbox files, the heartbeat file, outbox/ staging, and inbox/ attachments. Provider state is not here for the default Claude provider; it is group-scoped." .
+  ar:NanoClawAgentGroupWorkspace a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Read-write /workspace/agent group directory (host groups/<folder>) shared by sessions in one agent group: memory, notes, conversation archives, task run logs, and plugin-data. Nested read-only mounts cover container.json, CLAUDE.md, and plugins/." .
+  ar:NanoClawSharedRunnerSource a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Read-only /app/src mount." .
+  ar:NanoClawSharedSkillsDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Read-only /app/skills mount." .
+  ar:NanoClawAdditionalHostDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Allowlisted operator-selected host directory mounted under /workspace/extra; read-write requires both request and allowlist permission." .
+  ar:NanoClawContainerLayer a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFileSystem ;
+    rdfs:comment "Container-private writable layer, not a host bind mount. Its lifetime and persistence differ from the session and agent-group workspaces." .
+  ar:NanoClawProviderStateDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Claude provider state at /home/node/.claude (host data/v2-sessions/<agent-group-id>/.claude-shared): group-scoped and writable, holding provider transcripts, settings, and skill links. User-level settings here are loaded by the provider on every later session of the group. Other providers may contribute different state mounts." .
+  ar:NanoClawStampedPluginsDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    rdfs:comment "Group plugin code at /workspace/agent/plugins is a nested read-only mount despite its writable parent. Writable plugin-data lives at /workspace/agent/plugin-data, outside this subtree but inside the writable group workspace." .
+  ar:NanoClawSessionContextFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Host-written session identity file mounted read-only at /app/.nanoclaw-session.json; tells the runner which agent group and session it serves." .
+  ar:NanoClawInstructionSource a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "Agent-editable standing-instruction source /workspace/agent/instructions.prepend.md. The host composes it into the read-only CLAUDE.md at the next spawn, so an edit changes the agent's own instructions for every later session of the group." .
+  ar:NanoClawInstructionSource ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:NanoClawConversationArchive a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Searchable transcripts of earlier sessions under /workspace/agent/conversations/, readable and writable by every session of the group." .
+
+  # Mount-layer modes, not effective OS authorization. Extra-host mounts are
+  # alternatives selected by concrete group config and the host allowlist.
+  ar:NanoClawSessionWorkspaceMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadWriteMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawSessionWorkspace ;
+    ar:mountAccessMode ar:ReadWriteMountMode .
+  ar:NanoClawAgentGroupWorkspaceMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadWriteMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawAgentGroupWorkspace, ar:NanoClawPersistentMemory ;
+    ar:mountAccessMode ar:ReadWriteMountMode .
+  ar:NanoClawProviderStateMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadWriteMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawProviderStateDirectory ;
+    ar:mountAccessMode ar:ReadWriteMountMode ;
+    ar:mountConditionalOn ar:cond_default_claude_provider ;
+    rdfs:comment "Default Claude provider mount; provider contracts may substitute other modes and paths." .
+  ar:NanoClawSharedSkillsMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawSharedSkillsDirectory ;
+    ar:mountAccessMode ar:ReadOnlyMountMode ;
+    ar:mountConditionalOn ar:cond_shared_skills_exist .
+  ar:NanoClawSessionContextMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawSessionContextFile ;
+    ar:mountAccessMode ar:ReadOnlyMountMode .
+  ar:NanoClawSharedRunnerMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawSharedRunnerSource ;
+    ar:mountAccessMode ar:ReadOnlyMountMode .
+  ar:NanoClawConfigurationMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawContainerConfiguration ;
+    ar:mountAccessMode ar:ReadOnlyMountMode ;
+    ar:mountConditionalOn ar:cond_container_config_exists .
+  ar:NanoClawStandingInstructionsMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawStandingInstructions ;
+    ar:mountAccessMode ar:ReadOnlyMountMode ;
+    ar:mountConditionalOn ar:cond_standing_instructions_composed .
+  ar:NanoClawStampedPluginsMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawFixedMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawStampedPluginsDirectory ;
+    ar:mountAccessMode ar:ReadOnlyMountMode .
+  ar:NanoClawAdditionalReadOnlyMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount, ar:NanoClawAdditionalMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawAdditionalHostDirectory ;
+    ar:mountAccessMode ar:ReadOnlyMountMode ;
+    ar:mountConditionalOn ar:cond_additional_mount_admitted ;
+    ar:protectedByKind ar:NanoClawMountAllowlistControl .
+  ar:NanoClawAdditionalReadWriteMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadWriteMount, ar:NanoClawAdditionalMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:NanoClawAdditionalHostDirectory ;
+    ar:mountAccessMode ar:ReadWriteMountMode ;
+    ar:mountConditionalOn ar:cond_additional_mount_admitted,
+      ar:cond_additional_mount_readwrite ;
+    ar:protectedByKind ar:NanoClawMountAllowlistControl ;
+    rdfs:comment "RW only when requested and the matched allowlist root has allowReadWrite=true; otherwise an allowed mount is RO." .
+
+  ar:NanoClawPersistentMemory ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:NanoClawPersistentMemory ar:protectedByKind ar:NanoClawMountModeControl,
+    ar:LocalFilesystemAccessControl .
+  ar:NanoClawContainerLayer ar:protectedByKind ar:NanoClawContainerIsolationControl,
+    ar:LocalFilesystemAccessControl .
+  ar:NanoClawProviderStateDirectory ar:protectedByKind
+    ar:NanoClawMountModeControl, ar:LocalFilesystemAccessControl .
+  ar:NanoClawStampedPluginsDirectory ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawSharedRunnerSource ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawContainerConfiguration ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawStandingInstructions ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawContainerFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    ar:mayResideInKind ar:NanoClawContainerLayer, ar:NanoClawSessionWorkspace,
+      ar:NanoClawAgentGroupWorkspace, ar:NanoClawProviderStateDirectory,
+      ar:NanoClawSharedSkillsDirectory, ar:NanoClawAdditionalHostDirectory ;
+    ar:protectedByKind ar:LocalFilesystemAccessControl ;
+    rdfs:comment "Any file visible inside the session container: in the writable container layer or under one of its mounts. Use it where a skill names an arbitrary local file; where the file is written depends on the path chosen." .
+  ar:ShellScriptFile ar:mayResideInKind ar:NanoClawContainerLayer,
+    ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace,
+    ar:NanoClawSharedSkillsDirectory, ar:NanoClawAdditionalHostDirectory .
+  ar:ShellWorkingDirectory ar:mayResideInKind ar:NanoClawContainerLayer,
+    ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace,
+    ar:NanoClawAdditionalHostDirectory .
+  ar:NanoClawContainerConfiguration ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:NanoClawConversationArchive ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:NanoClawConversationArchive ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:NanoClawConversationContinuation ar:mayBeStoredAsKind ar:LocalFile ;
+    ar:mayResideInKind ar:NanoClawProviderStateDirectory .
+  ar:NanoClawSessionContextFile ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawStandingInstructions ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:NanoClawSessionWorkspace ar:protectedByKind ar:NanoClawContainerIsolationControl,
+    ar:LocalFilesystemAccessControl .
+  ar:NanoClawAgentGroupWorkspace ar:protectedByKind ar:NanoClawContainerIsolationControl,
+    ar:LocalFilesystemAccessControl .
+  ar:NanoClawSharedSkillsDirectory ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:NanoClawAdditionalHostDirectory ar:protectedByKind ar:NanoClawMountAllowlistControl,
+    ar:NanoClawMountModeControl, ar:LocalFilesystemAccessControl .
+
+  ar:NanoClawMountAllowlistControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Host-only allowlist, realpath check, blocked-pattern check, and requested-mode check for additional mounts." .
+  ar:NanoClawMountModeControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Container mount RO/RW enforcement, including nested RO paths that override a RW parent. A RW mount is not an authorization grant beyond OS and provider restrictions." .
+  ar:cond_container_file_readable a ar:Requirement ;
+    rdfs:comment "The concrete file path is visible in this container and readable under its mount and OS permissions; a file-kind classification alone does not establish this." .
+  ar:cond_container_file_writable a ar:Requirement ;
+    rdfs:comment "The concrete file operation is allowed by nested mount mode, OS permissions, and provider restrictions; create/delete also depend on parent-directory permissions. Optional host folders need allowlist admission." .
+  ar:cond_provider_file_tool_available a ar:Requirement ;
+    ar:satisfiedByEndpointKind ar:NanoClawProviderFileTool ;
+    rdfs:comment "The selected provider exposes its file read/write/search tool to this session." .
+  ar:cond_container_shell_available a ar:Requirement ;
+    ar:satisfiedByEndpointKind ar:NanoClawContainerShellExecution ;
+    rdfs:comment "The selected provider exposes container shell execution to this session." .
+  ar:cond_default_claude_provider a ar:Requirement ;
+    rdfs:comment "The default Claude provider supplies the group-scoped state mount; other providers can contribute different mounts." .
+  ar:cond_shared_skills_exist a ar:Requirement ;
+    rdfs:comment "The shared container/skills directory exists at session composition time." .
+  ar:cond_container_config_exists a ar:Requirement ;
+    rdfs:comment "A materialized group container.json exists." .
+  ar:cond_standing_instructions_composed a ar:Requirement ;
+    rdfs:comment "The host-composed project document exists and is selected for the provider's surface contract." .
+  ar:cond_additional_mount_admitted a ar:Requirement ;
+    rdfs:comment "The group requests an extra mount, an operator-maintained allowlist exists, and the root realpath and target path pass host checks. Blocked-pattern checks apply to the mount root, not every descendant." .
+  ar:cond_additional_mount_readwrite a ar:Requirement ;
+    rdfs:comment "The mount requests readonly=false and the matching allowed root has allowReadWrite=true; otherwise an admitted extra mount is read-only." .
+  ar:NanoClawContainerIsolationControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Container boundary in the current Docker driver: --cap-drop=ALL, no-new-privileges, an init process, and a non-root user (the host uid, else the image's node user). The root filesystem is writable (no --read-only) and there is no custom seccomp/AppArmor profile; mounts are restricted to the enumerated host paths, and the host project root, central database, and .env are never mounted." .
+  ar:NanoClawResourceLimitControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "PID limit of 2048 by default; optional CPU and memory caps, unset by default; a fixed 1 GiB /dev/shm." .
+
+  ar:NanoClawAgentContainer ar:containsKind ar:NanoClawContainerFileSystem,
+    ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace,
+    ar:NanoClawSharedRunnerSource, ar:NanoClawSharedSkillsDirectory,
+    ar:NanoClawAdditionalHostDirectory, ar:NanoClawProviderStateDirectory,
+    ar:NanoClawSessionContextFile, ar:ShellProcess .
+  ar:NanoClawMount ar:containsKind ar:NanoClawAdditionalHostDirectory .
+  ar:NanoClawAdditionalMount ar:protectedByKind ar:NanoClawMountAllowlistControl .
+  ar:NanoClawContainerFileSystem ar:containsKind ar:NanoClawContainerLayer,
+    ar:NanoClawSessionWorkspace, ar:NanoClawAgentGroupWorkspace,
+    ar:NanoClawSharedSkillsDirectory, ar:NanoClawAdditionalHostDirectory ;
+    ar:protectedByKind ar:NanoClawContainerIsolationControl,
+      ar:NanoClawMountModeControl, ar:LocalFilesystemAccessControl .
+  ar:NanoClawAgentContainer ar:protectedByKind ar:NanoClawContainerIsolationControl,
+    ar:NanoClawResourceLimitControl .
+
+  ar:NanoClawContainerShellExecution a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ShellExecution ;
+    ar:routesToKind ar:NanoClawContainerFileSystem, ar:NanoClawAgentContainer ;
+    ar:protectedByKind ar:NanoClawProviderToolPolicyControl ;
+    rdfs:comment "Shell execution inside the agent container, not arbitrary host-shell execution, auto-approved under the provider's tool policy. Writes through a RW mount can still change the underlying host directory." .
+  ar:NanoClawProviderFileTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    ar:routesToKind ar:NanoClawContainerFileSystem ;
+    ar:protectedByKind ar:NanoClawProviderToolPolicyControl ;
+    rdfs:comment "Provider-supplied file read/write/edit/search interface, constrained by the container-visible filesystem and auto-approved per call; there is no per-call host approval." .
+  ar:NanoClawProviderSubagentTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:SubagentSpawnTool ;
+    ar:routesToKind ar:NanoClawProviderRuntime ;
+    ar:protectedByKind ar:NanoClawProviderToolPolicyControl ;
+    rdfs:comment "Provider tool that starts an in-container subagent (Claude: the Task/Agent tool). The subagent inherits the session's tools, files, and network route; it is not a separately isolated principal." .
+
+  # Baseline endpoint capabilities are not skill operations and do not imply
+  # that a concrete provider exposed the tool or granted path access.
+  ar:NativeProviderFileRead a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawProviderFileTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_provider_file_tool_available,
+      ar:cond_container_file_readable ;
+    ar:sourceNote "Provider file tools may read a container-visible file when the provider exposes the tool and the concrete path is readable." .
+  ar:NativeProviderFileWrite a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawProviderFileTool ;
+    ar:nativeResourceKind ar:LocalFile ;
+    ar:nativeEffectType ar:Create, ar:Update ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_provider_file_tool_available,
+      ar:cond_container_file_writable ;
+    ar:sourceNote "Provider file tools may create or edit a file on a writable container-visible path; generic deletion is not assumed." .
+  ar:NativeShellFileRead a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_container_shell_available,
+      ar:cond_container_file_readable ;
+    ar:sourceNote "A container shell command can read a visible file if the chosen command and path permit it." .
+  ar:NativeShellFileMutation a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:LocalFile ;
+    ar:nativeEffectType ar:Create, ar:Update, ar:Delete ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_container_shell_available,
+      ar:cond_container_file_writable ;
+    ar:sourceNote "A chosen shell command can create, change, or delete a file on a writable path; no specific command or concrete file is asserted." .
+  ar:NativeShellProcessExecution a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:NanoClawContainerProcess ; ar:nativeEffectType ar:Execute ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_container_shell_available ;
+    ar:sourceNote "Shell execution starts a process inside the container, not on the host by default." .
+
+  ar:NativeShellProviderSettingsChange a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:NanoClawProviderStateDirectory ;
+    ar:nativeEffectType ar:Configure ;
+    ar:nativeScopeKind ar:NanoClawAgentGroup ;
+    ar:nativeRequires ar:cond_container_shell_available, ar:cond_default_claude_provider ;
+    ar:sourceNote "The writable group-scoped provider state includes user-level settings (and hooks) that the provider loads in later sessions of the same agent group, so a container process can change future provider behavior for the group." .
+  ar:NativeProviderSubagentStart a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawProviderSubagentTool ;
+    ar:nativeResourceKind ar:NanoClawProviderSubagent ;
+    ar:nativeEffectType ar:Delegate ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_provider_subagent_tool_available ;
+    ar:sourceNote "The provider may start a subagent in the same container; it can use the same native capabilities as the main agent." .
+  ar:cond_provider_subagent_tool_available a ar:Requirement ;
+    ar:satisfiedByEndpointKind ar:NanoClawProviderSubagentTool ;
+    rdfs:comment "The selected provider exposes a subagent tool to this session." .
+
+  # ── Container side vs host side ────────────────────────────────────────
+  # Container-side kinds are views at container paths. Each bind mount names
+  # the separate host-side location it makes visible (bindsFromKind). The
+  # container layer and container processes have no host-side counterpart.
+  ar:NanoClawContainerFileSystem ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawContainerLayer ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawSessionWorkspace ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawAgentGroupWorkspace ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawSharedRunnerSource ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawSharedSkillsDirectory ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawAdditionalHostDirectory ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderStateDirectory ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawStampedPluginsDirectory ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawSessionContextFile ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawConversationArchive ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawHostFileSystem ar:locatedOn ar:NanoClawHostProcess .
+  ar:NanoClawCentralDatabase ar:locatedOn ar:NanoClawHostProcess .
+  ar:NanoClawAgentRunner ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderRuntime ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderSubagent ar:locatedOn ar:NanoClawAgentContainer .
+
+  ar:NanoClawContainerProcess a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:ShellProcess ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "Process running inside the agent container (shell commands, scripts, local MCP servers). There is no agent-reachable host shell: work on the host happens only through fixed NanoClaw code paths." .
+  ar:NanoClawAgentContainer ar:containsKind ar:NanoClawContainerProcess .
+
+  ar:NanoClawHostSessionDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "data/v2-sessions/{agentGroupId}/{sessionId}" ;
+    rdfs:comment "Host directory behind /workspace: mailbox files, heartbeat, outbox, inbox. The host process also writes here (inbound rows, attachments, heartbeat removal)." .
+  ar:NanoClawHostSessionContextFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "data/v2-sessions/{agentGroupId}/.context/{sessionId}.json" .
+  ar:NanoClawHostGroupDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "groups/{folder}" ;
+    rdfs:comment "Host directory behind /workspace/agent, shared by every session of the group; the host also writes task run logs and composed files here." .
+  ar:NanoClawHostContainerConfigFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "groups/{folder}/container.json" ;
+    rdfs:comment "Host file rewritten from the central container_configs row at every spawn." .
+  ar:NanoClawHostComposedInstructionsFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "groups/{folder}/CLAUDE.md" ;
+    rdfs:comment "Host file recomposed from instruction sources at every spawn." .
+  ar:NanoClawHostPluginsDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "groups/{folder}/plugins" .
+  ar:NanoClawHostProviderStateDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "data/v2-sessions/{agentGroupId}/.claude-shared" .
+  ar:NanoClawHostRunnerSourceDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "container/agent-runner/src" .
+  ar:NanoClawHostSkillsSourceDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "container/skills" .
+  ar:NanoClawHostAllowlistedDirectory a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalDirectory ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "{allowlisted absolute host path}" ;
+    rdfs:comment "Operator directory outside the checkout admitted by the mount allowlist." .
+  ar:NanoClawHostFileSystem ar:containsKind ar:NanoClawHostSessionDirectory,
+    ar:NanoClawHostSessionContextFile, ar:NanoClawHostGroupDirectory,
+    ar:NanoClawHostProviderStateDirectory, ar:NanoClawHostRunnerSourceDirectory,
+    ar:NanoClawHostSkillsSourceDirectory, ar:NanoClawHostAllowlistedDirectory .
+  ar:NanoClawHostGroupDirectory ar:containsKind ar:NanoClawHostContainerConfigFile,
+    ar:NanoClawHostComposedInstructionsFile, ar:NanoClawHostPluginsDirectory .
+
+  ar:NanoClawSessionWorkspaceMount ar:containerPath "/workspace" ; ar:bindsFromKind ar:NanoClawHostSessionDirectory .
+  ar:NanoClawSessionContextMount ar:containerPath "/app/.nanoclaw-session.json" ; ar:bindsFromKind ar:NanoClawHostSessionContextFile .
+  ar:NanoClawAgentGroupWorkspaceMount ar:containerPath "/workspace/agent" ; ar:bindsFromKind ar:NanoClawHostGroupDirectory .
+  ar:NanoClawConfigurationMount ar:containerPath "/workspace/agent/container.json" ; ar:bindsFromKind ar:NanoClawHostContainerConfigFile .
+  ar:NanoClawStandingInstructionsMount ar:containerPath "/workspace/agent/CLAUDE.md" ; ar:bindsFromKind ar:NanoClawHostComposedInstructionsFile .
+  ar:NanoClawStampedPluginsMount ar:containerPath "/workspace/agent/plugins" ; ar:bindsFromKind ar:NanoClawHostPluginsDirectory .
+  ar:NanoClawProviderStateMount ar:containerPath "/home/node/.claude" ; ar:bindsFromKind ar:NanoClawHostProviderStateDirectory .
+  ar:NanoClawSharedRunnerMount ar:containerPath "/app/src" ; ar:bindsFromKind ar:NanoClawHostRunnerSourceDirectory .
+  ar:NanoClawSharedSkillsMount ar:containerPath "/app/skills" ; ar:bindsFromKind ar:NanoClawHostSkillsSourceDirectory .
+  ar:NanoClawAdditionalReadOnlyMount ar:containerPath "/workspace/extra/*" ; ar:bindsFromKind ar:NanoClawHostAllowlistedDirectory .
+  ar:NanoClawAdditionalReadWriteMount ar:containerPath "/workspace/extra/*" ; ar:bindsFromKind ar:NanoClawHostAllowlistedDirectory .
+
+  ar:NanoClawContainerShellExecution ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderFileTool ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderSubagentTool ar:executesOn ar:NanoClawAgentContainer .
+
+  ar:NanoClawRuntimeModule a ar:OntologyModule ;
+    ar:ontologyModuleId "nanoclaw-runtime" ;
+    ar:requiresOntologyModule "local-filesystem", "shell-execution", "nanoclaw-core" ;
+    rdfs:seeAlso
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/src/container-runner.ts>,
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/docs/SECURITY.md> .
+}

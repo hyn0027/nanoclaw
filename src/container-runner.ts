@@ -83,6 +83,8 @@ import {
   writeSessionRouting,
 } from './session-manager.js';
 import type { AgentGroup, Session } from './types.js';
+import { invalidSpec, packageName } from './modules/self-mod/packages.js';
+import { describeInstalled, recordInstalledPackages, type PackageBuildRecord } from './modules/self-mod/package-lock.js';
 
 /**
  * Docker defaults /dev/shm to 64m, which silently short-writes past that size.
@@ -1242,8 +1244,9 @@ function selectedSkillNames(containerConfig: import('./container-config.js').Con
 
 const execAsync = promisify(exec);
 
-/** Build a per-agent-group Docker image with custom packages. */
-export async function buildAgentGroupImage(agentGroupId: string): Promise<void> {
+/** Build a per-agent-group Docker image with custom packages, then record the versions it
+ *  installed (data/package-locks/<group>.json, see modules/self-mod/package-lock.ts). */
+export async function buildAgentGroupImage(agentGroupId: string): Promise<PackageBuildRecord> {
   const agentGroup = await getAgentGroup(agentGroupId);
   if (!agentGroup) throw new Error('Agent group not found');
 
@@ -1274,6 +1277,9 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
     // Non-fatal: the build below fails on its own if the base is really absent.
   }
 
+  // Specs go into RUN lines verbatim: refuse any that is not a name or an exact pin.
+  const badSpec = [...aptPackages.map((p) => invalidSpec('apt', p)), ...npmPackages.map((p) => invalidSpec('npm', p))].find(Boolean);
+  if (badSpec) throw new Error(`refusing to build image: ${badSpec}`);
   let dockerfile = `FROM ${CONTAINER_IMAGE}\nUSER root\n`;
   if (aptPackages.length > 0) {
     dockerfile += `RUN apt-get update && apt-get install -y ${aptPackages.join(' ')} && rm -rf /var/lib/apt/lists/*\n`;
@@ -1283,7 +1289,9 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
     // to /root/.npmrc (base image sets it up for agent-browser) so packages
     // with postinstall — e.g. playwright, puppeteer, native addons — don't
     // install silently broken.
-    const allowlist = npmPackages.map((p) => `echo 'only-built-dependencies[]=${p}' >> /root/.npmrc`).join(' && ');
+    const allowlist = npmPackages
+      .map((p) => `echo 'only-built-dependencies[]=${packageName('npm', p)}' >> /root/.npmrc`)
+      .join(' && ');
     dockerfile += `RUN ${allowlist} && pnpm install -g ${npmPackages.join(' ')}\n`;
   }
   dockerfile += 'USER node\n';
@@ -1319,5 +1327,15 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
   // Store the image tag in the DB
   await updateContainerConfigScalars(agentGroup.id, { image_tag: imageTag });
 
-  log.info('Per-agent-group image built', { agentGroupId, imageTag });
+  const record = await recordInstalledPackages({
+    runtime: CONTAINER_RUNTIME_BIN,
+    agentGroupId,
+    imageTag,
+    baseImageId: baseId || null,
+    apt: aptPackages,
+    npm: npmPackages,
+  });
+  if (record.error) log.warn('Could not read installed package versions from the image', { agentGroupId, err: record.error });
+  log.info('Per-agent-group image built', { agentGroupId, imageTag, installed: describeInstalled(record) });
+  return record;
 }

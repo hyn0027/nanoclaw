@@ -1,0 +1,62 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_onecli_gateway {
+  ar:skill_onecli_gateway a ar:Skill ;
+    ar:skillDirectory "onecli-gateway" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/nanoclaw/container/skills/onecli-gateway/SKILL.md" ;
+    ar:sourceSha256 "737ec44d03d77dc31656ff124d54cedc272af34393c7d342b6e71e0d629acfd1" ;
+    ar:requiresOntologyModule "nanoclaw-runtime", "nanoclaw-network", "nanoclaw-messaging",
+      "freeform-internet", "shell-execution", "local-filesystem" ;
+    ar:subjectToControlKind ar:OneCLIGatewayPolicy, ar:NanoClawEgressLockdownControl,
+      ar:NanoClawContainerIsolationControl, ar:NanoClawMountModeControl,
+      ar:NanoClawDestinationACL, ar:RemoteServiceAuthorizationControl ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_onecli_injection, ar:adapt_onecli_connect_flow,
+      ar:adapt_onecli_stubs, ar:adapt_onecli_policy_errors ;
+    ar:sourceNote "NanoClaw container skill authored by OneCLI (container/skills/onecli-gateway). Tells the agent to call any external API directly over HTTP; the gateway injects stored credentials for connected apps. It declares no operation on a service of its own: a request to a host whose credential is granted to the agent carries that credential whether or not the skill is loaded (the native shell network request), and what such a request reaches is modeled by that service's own ontology. Its operations are writing credential stubs and showing connect links." ;
+    ar:declaresOperation ar:op_onecli_write_stub, ar:op_onecli_present_connect_link .
+
+  ar:OneCLIConnectLink a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:OneCLIGateway ;
+    rdfs:comment "connect_url from a gateway error: a page of the OneCLI dashboard where the user connects a service to the vault. The link points at the gateway's web app; what leaves the machine is the chat message carrying it." .
+
+
+  ar:op_onecli_write_stub a ar:Operation ; ar:invokedThroughKind ar:NanoClawContainerShellExecution ;
+    ar:targetsKind ar:OneCLICredentialStub ;
+    ar:requires ar:cond_container_shell_available, ar:cond_container_file_writable ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Create credential stub files with \"onecli-managed\" placeholders (mode 0600) so an MCP server starts; never modify or delete existing stubs. The stubs hold no secret." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:OneCLICredentialStub ] .
+
+  ar:op_onecli_present_connect_link a ar:Operation ; ar:invokedThroughKind ar:NanoClawSendMessageTool ;
+    ar:targetsKind ar:OneCLIConnectLink ;
+    ar:requires ar:cond_builtin_messaging_tool_available, ar:cond_destination_projected_and_authorized ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:sourceNote "On 401/403/app_not_connected, show the user the connect_url from the error, then retry after they confirm." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Notify ; ar:affectsKind ar:NanoClawOutboundMessage ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:MessagingMessage ] .
+
+  ar:adapt_onecli_injection a ar:AdaptationMapping ;
+    ar:sourceAssumption "HTTPS_PROXY points at the gateway and stored credentials are injected per request." ;
+    ar:nanoclawModel "NanoClaw sets the proxy and CA for every container from the agent group's OneCLI identity; with egress lockdown the gateway is the only way out." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "Which services are reachable with credentials is set by the vault and the agent's secret mode, not by the skill or NanoClaw configuration." .
+  ar:adapt_onecli_connect_flow a ar:AdaptationMapping ;
+    ar:sourceAssumption "The agent shows the user a connect URL and waits." ;
+    ar:nanoclawModel "The link goes out through send_message to the session's chat; the retry happens on the user's next message." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "Anyone in the chat sees the connect link." ;
+    ar:adaptedOperation ar:op_onecli_present_connect_link .
+  ar:adapt_onecli_stubs a ar:AdaptationMapping ;
+    ar:sourceAssumption "Stub files for connected apps are pre-written." ;
+    ar:nanoclawModel "OneCLI-contributed files are bind-mounted read-only into the container; new stubs the agent writes go to the container layer or a workspace." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "Pre-written stubs are read-only in NanoClaw; agent-written stubs in /workspace persist on the host." ;
+    ar:adaptedOperation ar:op_onecli_write_stub .
+  ar:adapt_onecli_policy_errors a ar:AdaptationMapping ;
+    ar:sourceAssumption "The agent respects gateway policy errors and does not circumvent them." ;
+    ar:nanoclawModel "Enforcement is at the gateway; under egress lockdown there is no direct route around it. Without lockdown a client could skip the proxy." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "'Do not circumvent' is instruction-only; it holds structurally only with egress lockdown on." .
+}

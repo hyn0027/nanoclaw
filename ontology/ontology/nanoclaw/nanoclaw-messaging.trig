@@ -1,0 +1,204 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_nanoclaw_messaging {
+  # External and persistent resources.
+  ar:MessagingPlatform a ar:WorldSurfaceKind ;
+    rdfs:comment "External chat or event platform reached by a registered NanoClaw channel adapter." .
+  ar:MessagingGroup a ar:WorldSurfaceKind .
+  ar:MessagingThread a ar:WorldSurfaceKind .
+  ar:MessagingMessage a ar:WorldSurfaceKind .
+  ar:NanoClawWiring a ar:WorldSurfaceKind ;
+    rdfs:comment "Host-side association and routing policy between a messaging group and an agent group." .
+  ar:NanoClawDestinationGrant a ar:WorldSurfaceKind ;
+    rdfs:comment "Central agent_destinations record naming a channel or agent group an agent group may send to. Host delivery authorizes non-origin sends against this record, not against the session's projected copy. create_agent adds a two-way pair (creator to child, child to parent)." .
+  ar:NanoClawProjectedDestination a ar:WorldSurfaceKind ;
+    rdfs:comment "Session-local copy of the agent group's destination grants (inbound destinations table), rewritten by the host on wake. The container uses it only to resolve a destination name to a channel or agent target; editing it grants nothing." .
+  ar:NanoClawSessionMailbox a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Storage-neutral per-session mailbox contract. SQLite is the registered implementation in the inspected checkout." .
+  ar:NanoClawInboundMailbox a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    ar:specializesKind ar:NanoClawSessionMailbox ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Host-written side of a session mailbox (SQLite: inbound.db): pending messages, delivery records, projected destinations, session routing, scheduled-task rows. The agent-runner opens it read-only, but that is an application convention: the file sits in the read-write session workspace, so container shell or file writes can alter it." .
+  ar:NanoClawOutboundMailbox a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    ar:specializesKind ar:NanoClawSessionMailbox ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Container-written, host-read side of a session mailbox (SQLite: outbound.db): outbound messages and system actions, processing acknowledgements, session and container state. Not strictly single-writer: the host also writes a direct reply here when the command gate denies a command, and deletes orphaned processing claims when resetting a stuck container. Any container process, not only the built-in MCP tools, can write rows; host guards still apply to the actions they request." .
+  ar:NanoClawInboundMessage a ar:WorldSurfaceKind .
+  ar:NanoClawOutboundMessage a ar:WorldSurfaceKind .
+  ar:NanoClawProcessingAck a ar:WorldSurfaceKind .
+  ar:NanoClawDeliveryRecord a ar:WorldSurfaceKind .
+  ar:NanoClawOutboxArtifact a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile .
+  ar:NanoClawInboxArtifact a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Attachment sent to the agent, written by the host under /workspace/inbox/<message-id>/ (read-write through the session workspace mount)." .
+  ar:NanoClawOutboxArtifact ar:mayResideInKind ar:NanoClawSessionWorkspace .
+  ar:NanoClawInboxArtifact ar:mayResideInKind ar:NanoClawSessionWorkspace .
+  ar:NanoClawInboundMailbox ar:mayResideInKind ar:NanoClawSessionWorkspace .
+  ar:NanoClawOutboundMailbox ar:mayResideInKind ar:NanoClawSessionWorkspace .
+
+  ar:MessagingPlatform ar:containsKind ar:MessagingGroup, ar:MessagingMessage .
+  ar:MessagingGroup ar:containsKind ar:MessagingThread, ar:MessagingMessage .
+  ar:NanoClawSession ar:containsKind ar:NanoClawInboundMailbox,
+    ar:NanoClawOutboundMailbox .
+  ar:NanoClawInboundMailbox ar:containsKind ar:NanoClawInboundMessage,
+    ar:NanoClawProjectedDestination, ar:NanoClawDeliveryRecord .
+  ar:NanoClawInboundMessage ar:containsKind ar:NanoClawInboxArtifact .
+  ar:NanoClawCentralDatabase ar:containsKind ar:NanoClawWiring, ar:NanoClawDestinationGrant .
+  ar:NanoClawOutboundMailbox ar:containsKind ar:NanoClawOutboundMessage,
+    ar:NanoClawProcessingAck .
+  ar:NanoClawOutboundMessage ar:containsKind ar:NanoClawOutboxArtifact .
+
+  # Inbound path: platform adapter -> host routing -> mailbox -> runner/provider.
+  ar:NanoClawChannelAdapterInvocation a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:MessagingChannelInvocation ;
+    rdfs:comment "Native or Chat-SDK-backed adapter invocation. Concrete adapters are installed and registered separately." .
+  ar:NanoClawChannelAdapterInbound a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawChannelAdapterInvocation .
+  ar:NanoClawHostRouterInvocation a ar:InvocationSurfaceKind ;
+    rdfs:comment "Host routing stage that applies wiring, sender/engagement policy, session resolution, and command gating." .
+  ar:NanoClawInboundMailboxWrite a ar:InvocationSurfaceKind ;
+    rdfs:comment "Host-side insertion into the session's inbound mailbox." .
+  ar:NanoClawAgentRunnerMailboxRead a ar:InvocationSurfaceKind ;
+    rdfs:comment "Container-side polling and reading of pending inbound messages." .
+  ar:NanoClawProviderInvocation a ar:InvocationSurfaceKind ;
+    rdfs:comment "Agent-runner invocation of the configured provider." .
+  ar:NanoClawChannelAdapterInbound ar:routesToKind ar:NanoClawHostRouterInvocation .
+  ar:NanoClawHostRouterInvocation ar:routesToKind ar:NanoClawInboundMailboxWrite .
+  ar:NanoClawInboundMailboxWrite ar:routesToKind ar:NanoClawAgentRunnerMailboxRead .
+  ar:NanoClawAgentRunnerMailboxRead ar:routesToKind ar:NanoClawProviderInvocation .
+
+  # Outbound path: callable tool -> outbound mailbox -> host -> adapter -> platform.
+  ar:NanoClawOutboundMailboxWrite a ar:InvocationSurfaceKind ;
+    rdfs:comment "Container-side write of an outbound chat, file, system action, CLI request, or processing acknowledgement." .
+  ar:NanoClawHostDeliveryInvocation a ar:InvocationSurfaceKind ;
+    rdfs:comment "Host-side drain, authorization, action processing, retry, and delivery stage." .
+  ar:NanoClawChannelAdapterDelivery a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawChannelAdapterInvocation ;
+    ar:routesToKind ar:MessagingPlatform .
+  ar:NanoClawAgentRouteInvocation a ar:InvocationSurfaceKind ;
+    ar:routesToKind ar:NanoClawInboundMailboxWrite ;
+    rdfs:comment "Host routing of an agent-addressed outbound message into a session of the target agent group (reply-to source session, then peer affinity, then the shared session). Subject to the agent-to-agent message guard." .
+  ar:NanoClawOutboundMailboxWrite ar:routesToKind ar:NanoClawHostDeliveryInvocation .
+  ar:NanoClawHostDeliveryInvocation ar:routesToKind ar:NanoClawChannelAdapterDelivery,
+    ar:NanoClawAgentRouteInvocation .
+
+  # Built-in MCP server. These are exact endpoint families found in the
+  # inspected checkout, not a promise that every provider exposes them.
+  ar:NanoClawBuiltInMCPTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:MCPToolEndpoint ;
+    rdfs:comment "Tool served by the built-in NanoClaw MCP server, a local stdio process inside the container. The complete built-in set is send_message, send_file, edit_message, add_reaction, ask_user_question, send_card, create_agent, install_packages, and add_mcp_server; each only writes outbound mailbox rows." .
+  ar:NanoClawSendMessageTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite .
+  ar:NanoClawSendFileTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite .
+  ar:NanoClawEditMessageTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite .
+  ar:NanoClawAddReactionTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite .
+  ar:NanoClawAskUserQuestionTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite, ar:NanoClawAgentRunnerMailboxRead ;
+    rdfs:comment "Writes an interactive question outbound and polls for the matching inbound response, which the host writes when a user answers. Always addressed to the session's own chat, not a named destination." .
+  ar:NanoClawSendCardTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawBuiltInMCPTool, ar:MessagingToolEndpoint ;
+    ar:routesToKind ar:NanoClawOutboundMailboxWrite ;
+    rdfs:comment "Fire-and-forget card with link buttons, always addressed to the session's own chat." .
+
+  ar:cond_builtin_messaging_tool_available a ar:Requirement ;
+    rdfs:comment "The configured provider exposes the NanoClaw built-in messaging tool in this session." .
+  ar:cond_destination_projected_and_authorized a ar:Requirement ;
+    rdfs:comment "The destination name resolves in the session's projected copy and host delivery authorizes the send: the session's origin chat is always allowed; any other channel or agent needs a central destination grant (enforced only when the agent-to-agent module is installed), and agent sends also pass the agent-to-agent guard. Adapter/platform permission is a separate condition." .
+  ar:NativeMessageEnqueue a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawSendMessageTool ;
+    ar:nativeResourceKind ar:NanoClawOutboundMessage ;
+    ar:nativeEffectType ar:Create ;
+    ar:nativeScopeKind ar:NanoClawOutboundMailbox ;
+    ar:nativeRequires ar:cond_builtin_messaging_tool_available ;
+    ar:sourceNote "Calling the built-in send tool may enqueue an outbound message; this is not proof of remote delivery." .
+  ar:NativeMessageDelivery a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawSendMessageTool ;
+    ar:nativeResourceKind ar:NanoClawDestinationGrant ;
+    ar:nativeEffectType ar:Transmit ;
+    ar:nativeScopeKind ar:NanoClawDestinationGrant ;
+    ar:nativeRequires ar:cond_builtin_messaging_tool_available,
+      ar:cond_destination_projected_and_authorized ;
+    ar:sourceNote "A queued message may be delivered by the host to a named channel or agent destination when the applicable destination and adapter checks pass." .
+  ar:NativeFileSendRead a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawSendFileTool ;
+    ar:nativeResourceKind ar:NanoClawOutboxArtifact ;
+    ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawSessionWorkspace ;
+    ar:nativeRequires ar:cond_builtin_messaging_tool_available,
+      ar:cond_container_file_readable ;
+    ar:sourceNote "Sending a file may read a staged outbox artifact; the exact path and later delivery are separate facts." .
+
+  # Session state that sits in the read-write session workspace, so container
+  # processes can reach it directly, not only through the built-in tools.
+  ar:NativeShellOutboundMailboxWrite a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:NanoClawOutboundMessage ;
+    ar:nativeEffectType ar:Create ;
+    ar:nativeScopeKind ar:NanoClawOutboundMailbox ;
+    ar:nativeRequires ar:cond_container_shell_available ;
+    ar:sourceNote "A container process can insert outbound rows (chat, system action, CLI request) directly, bypassing the built-in tools' argument validation; host delivery, destination checks, and action guards still decide what happens." .
+  ar:NativeShellInboundMailboxMutation a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:NanoClawInboundMailbox ;
+    ar:nativeEffectType ar:Update, ar:Delete ;
+    ar:nativeScopeKind ar:NanoClawSessionWorkspace ;
+    ar:nativeRequires ar:cond_container_shell_available ;
+    ar:sourceNote "The runner opens inbound.db read-only, but the file is on the read-write session mount; a container process can alter pending messages, projected destinations, or scheduled-task rows in its own session. Projected destinations are not authorization, so this cannot add a delivery grant." .
+
+  # ── Where each step runs ──
+  # Platforms are remote in general; local channels (the CLI socket, Emacs bridge)
+  # deliver on the host instead, which a runtime snapshot resolves per channel.
+  ar:MessagingPlatform ar:locatedOn ar:ExternalNetwork .
+  ar:MessagingGroup ar:locatedOn ar:ExternalNetwork .
+  ar:MessagingThread ar:locatedOn ar:ExternalNetwork .
+  ar:MessagingMessage ar:locatedOn ar:ExternalNetwork .
+  ar:NanoClawChannelAdapterInvocation ar:executesOn ar:NanoClawHostProcess .
+  ar:NanoClawHostRouterInvocation ar:executesOn ar:NanoClawHostProcess .
+  ar:NanoClawInboundMailboxWrite ar:executesOn ar:NanoClawHostProcess .
+  ar:NanoClawHostDeliveryInvocation ar:executesOn ar:NanoClawHostProcess .
+  ar:NanoClawAgentRouteInvocation ar:executesOn ar:NanoClawHostProcess .
+  ar:NanoClawAgentRunnerMailboxRead ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawProviderInvocation ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawOutboundMailboxWrite ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawBuiltInMCPTool ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawInboxArtifact ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawOutboxArtifact ar:locatedOn ar:NanoClawAgentContainer .
+
+  ar:NanoClawHostAttachmentStaging a ar:InvocationSurfaceKind ;
+    ar:executesOn ar:NanoClawHostProcess ;
+    ar:routesToKind ar:NanoClawInboxArtifact ;
+    rdfs:comment "Host copies an inbound attachment (or an agent-to-agent file) into the target session's inbox directory on the host, with symlink and containment checks; the container then sees it under /workspace/inbox." .
+  ar:NanoClawHostRouterInvocation ar:routesToKind ar:NanoClawHostAttachmentStaging .
+
+  # Direct consequence routes (the outbound-mailbox and host-delivery hop is implied).
+  ar:NanoClawSendMessageTool ar:routesToKind ar:NanoClawChannelAdapterDelivery, ar:NanoClawAgentRouteInvocation .
+  ar:NanoClawSendFileTool ar:routesToKind ar:NanoClawChannelAdapterDelivery, ar:NanoClawAgentRouteInvocation .
+  ar:NanoClawEditMessageTool ar:routesToKind ar:NanoClawChannelAdapterDelivery .
+  ar:NanoClawAddReactionTool ar:routesToKind ar:NanoClawChannelAdapterDelivery .
+  ar:NanoClawAskUserQuestionTool ar:routesToKind ar:NanoClawChannelAdapterDelivery .
+  ar:NanoClawSendCardTool ar:routesToKind ar:NanoClawChannelAdapterDelivery .
+  ar:NanoClawAgentRouteInvocation ar:routesToKind ar:NanoClawHostAttachmentStaging .
+
+  ar:NanoClawMessagingModule a ar:OntologyModule ;
+    ar:ontologyModuleId "nanoclaw-messaging" ;
+    ar:requiresOntologyModule "tool-endpoints", "local-filesystem",
+      "nanoclaw-core", "nanoclaw-runtime" ;
+    rdfs:seeAlso
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/src/channels/adapter.ts>,
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/src/mailbox/types.ts>,
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/container/agent-runner/src/mcp-tools/core.ts> .
+
+  # What the host-side delivery steps do to the kinds they route to.
+  ar:NanoClawChannelAdapterDelivery ar:stepEffectType ar:Create, ar:Transmit .
+  ar:NanoClawHostAttachmentStaging ar:stepEffectType ar:Create .
+}

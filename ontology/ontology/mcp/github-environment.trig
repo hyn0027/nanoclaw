@@ -1,0 +1,233 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# The GitHub environment an MCP server (or any GitHub client) acts on: the entities
+# of a GitHub account and how they relate. Containment (ar:containsKind) is
+# ownership: deleting the container removes what it contains. References
+# (ar:referencesKind, ar:authoredByKind, ar:assignedToKind) are associations.
+# Authored from the GitHub REST/GraphQL object model as the GitHub MCP server's
+# tools expose it (tool descriptions and input schemas in sources/github.json).
+ar:g_github_environment {
+  ar:GitHubEnvironmentModule a ar:OntologyModule ;
+    ar:ontologyModuleId "github-environment" ;
+    ar:requiresOntologyModule "freeform-internet" ;
+    ar:resourcesOnly true .
+
+  # ── Root ──────────────────────────────────────────────────────────────────
+  ar:GitHubResource a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteService ;
+    ar:protectedByKind ar:RemoteServiceAuthorizationControl ;
+    rdfs:comment "Anything stored at GitHub on behalf of its users. Access is limited by the token's scopes or permissions and by each user's role on the owning repository or organization." .
+
+  # ── Accounts ──────────────────────────────────────────────────────────────
+  ar:GitHubEnterprise a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "An enterprise account grouping organizations under shared policy." .
+  ar:GitHubOrganization a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "An organization account owning repositories, teams, projects, and policy." .
+  ar:GitHubUser a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A user account (the token's own user among them): profile, owned repositories, gists, stars, notifications." .
+  ar:GitHubTeam a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A team within an organization; its members get the team's repository access." .
+
+  # ── Repositories and their code ───────────────────────────────────────────
+  ar:GitHubRepository a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A repository: code, history, issues, pull requests, automation, and security data." .
+  ar:GitHubRepositoryCollaborator a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A user's permission on a repository (collaborator role)." .
+  ar:GitHubBranch a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A branch: a named, movable pointer to a commit." .
+  ar:GitHubCommit a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A commit: a snapshot of the repository's files with author and message. History is append-only; a new commit changes a branch, not past commits." .
+  ar:GitHubRepositoryFile a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A file or directory in a repository at a given commit (contents, tree, blame). Writing a file creates a commit." .
+  ar:GitHubTag a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A git tag naming a commit." .
+  ar:GitHubRelease a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A release published from a tag, with notes and assets." .
+
+  # ── Issues and pull requests ──────────────────────────────────────────────
+  ar:GitHubIssue a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "An issue: title, body, state, labels, assignees, milestone, type, fields, sub-issues, and dependencies." .
+  ar:GitHubIssueComment a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A conversation comment on an issue or pull request." .
+  ar:GitHubReaction a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "An emoji reaction on an issue, pull request, or comment." .
+  ar:GitHubLabel a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A repository label applied to issues and pull requests." .
+  ar:GitHubMilestone a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A repository milestone grouping issues and pull requests." .
+  ar:GitHubIssueTypeOrField a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "Issue types and custom issue field definitions of a repository or organization." .
+  ar:GitHubPullRequest a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A pull request proposing to merge a head branch into a base branch. Merging creates commits on the base branch." .
+  ar:GitHubPullRequestReview a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A review of a pull request (pending or submitted: approve, request changes, comment)." .
+  ar:GitHubReviewComment a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A review comment on a line of a pull request's diff, and its thread." .
+  ar:GitHubCheckRun a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A status check or check run reported on a commit or pull request." .
+
+  # ── Automation ────────────────────────────────────────────────────────────
+  ar:GitHubWorkflow a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A GitHub Actions workflow defined in the repository." .
+  ar:GitHubWorkflowRun a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A run of a workflow. A run executes the repository's workflow code on GitHub's runners with the workflow's permissions and secrets." .
+  ar:GitHubWorkflowJob a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A job of a workflow run, with its logs." .
+  ar:GitHubWorkflowArtifact a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A file artifact uploaded by a workflow run." .
+
+  # ── Security and governance ───────────────────────────────────────────────
+  ar:GitHubCodeScanningAlert a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A code scanning (static analysis) alert." .
+  ar:GitHubCodeQualityFinding a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A code quality finding." .
+  ar:GitHubSecretScanningAlert a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A secret scanning alert: a credential found committed to the repository (its value is part of the alert)." .
+  ar:GitHubDependabotAlert a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A Dependabot alert for a vulnerable dependency." .
+  ar:GitHubSecurityAdvisory a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A security advisory: global (GitHub Advisory Database) or a repository's own." .
+  ar:GitHubRuleset a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A ruleset (branch or tag protection rules) at repository, organization, or enterprise level, and its rule-suite evaluations." .
+  ar:GitHubCustomProperty a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A custom property definition or value at repository, organization, or enterprise level." .
+
+  # ── Collaboration ─────────────────────────────────────────────────────────
+  ar:GitHubDiscussion a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A discussion of a repository or organization, in a category." .
+  ar:GitHubDiscussionComment a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A comment or reply in a discussion; one may be marked as the answer." .
+  ar:GitHubDiscussionCategory a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A discussion category." .
+  ar:GitHubGist a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A gist: files shared publicly or secretly (unlisted, readable by anyone with the URL)." .
+  ar:GitHubNotification a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A notification thread of the user, and the user's subscription to it or to a repository." .
+  ar:GitHubStar a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A star a user has given a repository (public)." .
+  ar:GitHubProject a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A project (planning board) of a user or organization." .
+  ar:GitHubProjectItem a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "An item, field, view, iteration, or status update of a project." .
+
+  # ── Copilot and docs ──────────────────────────────────────────────────────
+  ar:GitHubCopilotTask a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "Work delegated to GitHub Copilot: a coding agent job that opens a pull request, or a Copilot code review request." .
+  ar:GitHubCopilotSpace a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "A Copilot Space: curated context shared for Copilot." .
+  ar:GitHubDocumentation a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
+    rdfs:comment "GitHub's product and support documentation." .
+
+  # ── Containment (ownership) ───────────────────────────────────────────────
+  ar:GitHubEnterprise ar:containsKind ar:GitHubOrganization, ar:GitHubRuleset, ar:GitHubCustomProperty .
+  ar:GitHubOrganization ar:containsKind ar:GitHubTeam, ar:GitHubRepository, ar:GitHubProject,
+    ar:GitHubRuleset, ar:GitHubCustomProperty, ar:GitHubDiscussion, ar:GitHubDiscussionCategory,
+    ar:GitHubIssueTypeOrField, ar:GitHubSecurityAdvisory .
+  ar:GitHubUser ar:containsKind ar:GitHubRepository, ar:GitHubGist, ar:GitHubStar,
+    ar:GitHubNotification, ar:GitHubProject, ar:GitHubCopilotSpace .
+  ar:GitHubRepository ar:containsKind ar:GitHubBranch, ar:GitHubCommit, ar:GitHubRepositoryFile,
+    ar:GitHubTag, ar:GitHubRelease, ar:GitHubIssue, ar:GitHubPullRequest, ar:GitHubLabel,
+    ar:GitHubMilestone, ar:GitHubIssueTypeOrField, ar:GitHubWorkflow, ar:GitHubCodeScanningAlert,
+    ar:GitHubCodeQualityFinding, ar:GitHubSecretScanningAlert, ar:GitHubDependabotAlert,
+    ar:GitHubSecurityAdvisory, ar:GitHubDiscussion, ar:GitHubDiscussionCategory, ar:GitHubRuleset,
+    ar:GitHubCustomProperty, ar:GitHubRepositoryCollaborator, ar:GitHubCopilotTask .
+  ar:GitHubIssue ar:containsKind ar:GitHubIssueComment, ar:GitHubReaction .
+  ar:GitHubIssueComment ar:containsKind ar:GitHubReaction .
+  ar:GitHubPullRequest ar:containsKind ar:GitHubIssueComment, ar:GitHubPullRequestReview,
+    ar:GitHubReviewComment, ar:GitHubCheckRun, ar:GitHubReaction .
+  ar:GitHubPullRequestReview ar:containsKind ar:GitHubReviewComment .
+  ar:GitHubReviewComment ar:containsKind ar:GitHubReaction .
+  ar:GitHubWorkflow ar:containsKind ar:GitHubWorkflowRun .
+  ar:GitHubWorkflowRun ar:containsKind ar:GitHubWorkflowJob, ar:GitHubWorkflowArtifact .
+  ar:GitHubDiscussion ar:containsKind ar:GitHubDiscussionComment .
+  ar:GitHubProject ar:containsKind ar:GitHubProjectItem .
+
+  # ── References (associations) ─────────────────────────────────────────────
+  ar:GitHubRepository ar:referencesKind ar:GitHubRepository .   # a fork refers to its parent
+  ar:GitHubTeam ar:assignedToKind ar:GitHubUser .                # members
+  ar:GitHubTeam ar:referencesKind ar:GitHubRepository .          # team repository access
+  ar:GitHubRepositoryCollaborator ar:referencesKind ar:GitHubUser .
+  ar:GitHubBranch ar:referencesKind ar:GitHubCommit .            # head commit
+  ar:GitHubCommit ar:authoredByKind ar:GitHubUser .
+  ar:GitHubCommit ar:referencesKind ar:GitHubCommit, ar:GitHubRepositoryFile .   # parents, tree
+  ar:GitHubTag ar:referencesKind ar:GitHubCommit .
+  ar:GitHubRelease ar:referencesKind ar:GitHubTag ; ar:authoredByKind ar:GitHubUser .
+  ar:GitHubIssue ar:authoredByKind ar:GitHubUser ; ar:assignedToKind ar:GitHubUser ;
+    ar:referencesKind ar:GitHubLabel, ar:GitHubMilestone, ar:GitHubIssueTypeOrField, ar:GitHubIssue .  # sub-issues, dependencies, duplicates
+  ar:GitHubIssueComment ar:authoredByKind ar:GitHubUser .
+  ar:GitHubReaction ar:authoredByKind ar:GitHubUser .
+  ar:GitHubPullRequest ar:authoredByKind ar:GitHubUser ; ar:assignedToKind ar:GitHubUser, ar:GitHubTeam ;  # assignees, reviewers
+    ar:referencesKind ar:GitHubBranch, ar:GitHubCommit, ar:GitHubLabel, ar:GitHubMilestone, ar:GitHubIssue .
+  ar:GitHubPullRequestReview ar:authoredByKind ar:GitHubUser ; ar:referencesKind ar:GitHubCommit .
+  ar:GitHubReviewComment ar:authoredByKind ar:GitHubUser ; ar:referencesKind ar:GitHubRepositoryFile .
+  ar:GitHubCheckRun ar:referencesKind ar:GitHubCommit, ar:GitHubWorkflowRun .
+  ar:GitHubWorkflow ar:referencesKind ar:GitHubRepositoryFile .  # defined by a file under .github/workflows
+  ar:GitHubWorkflowRun ar:referencesKind ar:GitHubCommit, ar:GitHubBranch ; ar:authoredByKind ar:GitHubUser .
+  ar:GitHubCodeScanningAlert ar:referencesKind ar:GitHubRepositoryFile, ar:GitHubCommit .
+  ar:GitHubSecretScanningAlert ar:referencesKind ar:GitHubRepositoryFile, ar:GitHubCommit .
+  ar:GitHubDependabotAlert ar:referencesKind ar:GitHubSecurityAdvisory, ar:GitHubRepositoryFile .
+  ar:GitHubDiscussion ar:authoredByKind ar:GitHubUser ; ar:referencesKind ar:GitHubDiscussionCategory .
+  ar:GitHubDiscussionComment ar:authoredByKind ar:GitHubUser .
+  ar:GitHubGist ar:authoredByKind ar:GitHubUser .
+  ar:GitHubStar ar:referencesKind ar:GitHubRepository .
+  ar:GitHubNotification ar:referencesKind ar:GitHubRepository, ar:GitHubIssue, ar:GitHubPullRequest,
+    ar:GitHubDiscussion, ar:GitHubRelease, ar:GitHubWorkflowRun .
+  ar:GitHubProjectItem ar:referencesKind ar:GitHubIssue, ar:GitHubPullRequest .
+  ar:GitHubRuleset ar:referencesKind ar:GitHubBranch, ar:GitHubTag .
+  ar:GitHubCopilotTask ar:referencesKind ar:GitHubIssue, ar:GitHubPullRequest, ar:GitHubBranch .
+  ar:GitHubCopilotSpace ar:referencesKind ar:GitHubRepository, ar:GitHubRepositoryFile, ar:GitHubIssue, ar:GitHubPullRequest .
+
+  # ── Event-driven reactions (ar:mayTrigger) ────────────────────────────────
+  # When the subject undergoes onEffectType, GitHub itself may cause effectType on
+  # affectsKind. Workflow runs execute the repository's workflow code on GitHub's
+  # runners with the workflow's token and secrets.
+  ar:GitHubCommit ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "push event" ; ar:triggerEvent "push" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "push event" ; ar:triggerEvent "push" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubCheckRun ; rdfs:comment "checks on the new commit" ] .
+  ar:GitHubBranch ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "create event" ; ar:triggerEvent "create" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "push event" ; ar:triggerEvent "push" ; ar:triggerHandlerKind ar:GitHubWorkflow ] .
+  ar:GitHubRepositoryFile ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Update ; ar:affectsKind ar:GitHubWorkflow ; rdfs:comment "a file under .github/workflows defines a workflow" ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Update ; ar:affectsKind ar:GitHubWorkflow ; rdfs:comment "a file under .github/workflows defines a workflow" ] .
+  ar:GitHubPullRequest ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "pull_request event" ; ar:triggerEvent "pull_request" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "pull_request event" ; ar:triggerEvent "pull_request" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "reviewers and watchers notified" ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "participants notified" ] .
+  ar:GitHubIssue ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "issues event" ; ar:triggerEvent "issues" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "issues event" ; ar:triggerEvent "issues" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "assignees, mentions, and watchers notified" ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "participants notified" ] .
+  ar:GitHubIssueComment ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "issue_comment event" ; ar:triggerEvent "issue_comment" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "participants and mentions notified" ] .
+  ar:GitHubPullRequestReview ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "pull_request_review event" ; ar:triggerEvent "pull_request_review" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "author notified when a review is submitted" ] .
+  ar:GitHubReviewComment ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "pull_request_review_comment event" ; ar:triggerEvent "pull_request_review_comment" ; ar:triggerHandlerKind ar:GitHubWorkflow ] .
+  ar:GitHubRelease ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "release event" ; ar:triggerEvent "release" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "watchers notified" ] .
+  ar:GitHubLabel ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "label event" ; ar:triggerEvent "label" ; ar:triggerHandlerKind ar:GitHubWorkflow ] .
+  ar:GitHubDiscussion ar:mayTrigger
+    [ ar:onEffectType ar:Update ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "discussion event" ; ar:triggerEvent "discussion" ; ar:triggerHandlerKind ar:GitHubWorkflow ] .
+  ar:GitHubDiscussionComment ar:mayTrigger
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Execute ; ar:affectsKind ar:GitHubWorkflowRun ; rdfs:comment "discussion_comment event" ; ar:triggerEvent "discussion_comment" ; ar:triggerHandlerKind ar:GitHubWorkflow ],
+    [ ar:onEffectType ar:Create ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubNotification ; rdfs:comment "participants notified" ] .
+  ar:GitHubCopilotTask ar:mayTrigger
+    [ ar:onEffectType ar:Delegate ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubPullRequest ; rdfs:comment "Copilot coding agent opens a pull request" ],
+    [ ar:onEffectType ar:Delegate ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubCommit ; rdfs:comment "Copilot coding agent pushes commits" ] .
+  ar:GitHubWorkflowRun ar:mayTrigger
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubCommit ; rdfs:comment "a run may push with its token" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubRelease ; rdfs:comment "a run may publish a release" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubIssueComment ; rdfs:comment "a run may comment" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubWorkflowArtifact ; rdfs:comment "a run uploads artifacts" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubCheckRun ; rdfs:comment "a run reports checks" ],
+    [ ar:onEffectType ar:Execute ; ar:effectType ar:Transmit ; ar:affectsKind ar:RemoteNetworkEndpoint ; rdfs:comment "runners reach the Internet, outside the OneCLI gateway, with the workflow's secrets" ] .
+}

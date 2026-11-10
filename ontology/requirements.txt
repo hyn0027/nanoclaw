@@ -1,0 +1,4 @@
+rdflib>=7,<8
+pyshacl>=0.30,<1
+openai>=3.19,<4
+python-dotenv>=1,<2

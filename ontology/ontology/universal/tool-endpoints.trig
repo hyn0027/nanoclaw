@@ -1,0 +1,27 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_tool_endpoints {
+  ar:ToolEndpointsModule a ar:OntologyModule ;
+    ar:ontologyModuleId "tool-endpoints" .
+
+  ar:ToolEndpoint a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    rdfs:comment "Parent kind for callable surfaces exposed to an agent or invoked on its behalf. This is a taxonomy kind, not an OWL superclass of all concrete tools." .
+  ar:MessagingChannelInvocation a ar:InvocationSurfaceKind ;
+    rdfs:comment "Abstract invocation that sends, receives, or changes content through a messaging channel. It does not identify a harness or guarantee delivery." .
+  ar:MessagingToolEndpoint a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint, ar:MessagingChannelInvocation ;
+    rdfs:comment "Callable messaging surface. Concrete tools may expose only a subset of send, edit, reaction, read, search, moderation, or channel-management behavior." .
+  ar:MCPToolEndpoint a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    rdfs:comment "One callable MCP server tool exposed to a host/client via tools/list and invoked via tools/call. Not the MCP server, connection, transport, resource, or prompt." ;
+    rdfs:seeAlso <https://modelcontextprotocol.io/specification/2026-07-28/server/tools> .
+  ar:MCPTransportInvocation a ar:InvocationSurfaceKind ;
+    rdfs:comment "Transport between an MCP client and server; distinct from the callable tool and from downstream APIs used by the server." .
+  ar:LocalStdioMCPTransport a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:MCPTransportInvocation ;
+    rdfs:comment "Local MCP client/server communication over standard input and output; this leg is not an Internet request." .
+  ar:RemoteHTTPMCPTransport a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:MCPTransportInvocation ;
+    rdfs:comment "HTTP(S) transport from the MCP client to a remote MCP service. Any later request made by that service is a separate, remote execution path." .
+}

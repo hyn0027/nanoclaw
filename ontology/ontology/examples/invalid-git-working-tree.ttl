@@ -1,0 +1,5 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix ex: <urn:agent-risk:example:> .
+
+ex:notARepository a ar:ConventionalGitWorkingTree ;
+  ar:gitRepositoryValidated true .

@@ -1,0 +1,112 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_sherpa_onnx_tts {
+  ar:skill_sherpa_onnx_tts a ar:Skill ;
+    ar:skillDirectory "sherpa-onnx-tts-1.0.0" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/agent-risk/top_skills/sherpa-onnx-tts-1.0.0/SKILL.md" ;
+    ar:sourceSha256 "afd52f85a94d8e46114fcd7e9bebcdf4c7dcf0de34fdebf178c38cab60246d7e" ;
+    ar:requiresOntologyModule "nanoclaw-core", "nanoclaw-runtime",
+      "nanoclaw-network", "nanoclaw-control" ;
+    ar:subjectToControlKind ar:NanoClawContainerIsolationControl,
+      ar:NanoClawMountModeControl, ar:NanoClawMountAllowlistControl,
+      ar:NanoClawEgressLockdownControl, ar:OneCLIGatewayPolicy ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_sherpa_download,
+      ar:adapt_sherpa_configuration, ar:adapt_sherpa_synthesis ;
+    ar:sourceNote "NanoClaw adaptation: runtime, model, environment settings, and generated audio live in the persistent agent-group workspace and are manipulated from the container shell." ;
+    ar:declaresOperation ar:op_sherpa_download, ar:op_sherpa_configure,
+      ar:op_sherpa_synthesize .
+
+  ar:SherpaWrapperCLI a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerShellExecution .
+  ar:SherpaRuntimeCLI a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerShellExecution .
+  ar:SherpaWrapperCLI ar:routesToKind ar:SherpaRuntimeCLI .
+  ar:RuntimeReleaseHost a ar:WorldSurfaceKind ; ar:specializesKind ar:InternetHost .
+  ar:VoiceModelReleaseHost a ar:WorldSurfaceKind ; ar:specializesKind ar:InternetHost .
+  ar:SherpaReleaseDownloadEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint .
+  ar:RuntimeReleaseArchive a ar:WorldSurfaceKind ; ar:specializesKind ar:RemoteWebResource .
+  ar:VoiceModelReleaseArchive a ar:WorldSurfaceKind ; ar:specializesKind ar:RemoteWebResource .
+  ar:RuntimeReleaseHost ar:containsKind ar:RuntimeReleaseArchive .
+  ar:VoiceModelReleaseHost ar:containsKind ar:VoiceModelReleaseArchive .
+  ar:InstalledRuntime a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalDirectory .
+  ar:InstalledVoiceModel a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalDirectory .
+  ar:VoiceInputText a ar:WorldSurfaceKind .
+  ar:LocalAudioFile a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalFile .
+  ar:SkillEnvironmentConfig a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalFile .
+  ar:InstalledRuntime ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:InstalledVoiceModel ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:SkillEnvironmentConfig ar:mayResideInKind ar:NanoClawAgentGroupWorkspace .
+  ar:LocalAudioFile ar:mayResideInKind ar:NanoClawAgentGroupWorkspace,
+    ar:NanoClawSessionWorkspace, ar:NanoClawAdditionalHostDirectory .
+  ar:op_sherpa_download ar:requires ar:cond_container_file_writable .
+  ar:op_sherpa_configure ar:requires ar:cond_container_file_writable .
+  ar:op_sherpa_synthesize ar:requires ar:cond_container_file_writable .
+  ar:LocalFileSystem ar:containsKind ar:InstalledRuntime, ar:InstalledVoiceModel, ar:LocalAudioFile .
+  ar:NanoClawAgentGroupWorkspace ar:containsKind ar:InstalledRuntime,
+    ar:InstalledVoiceModel, ar:LocalAudioFile, ar:SkillEnvironmentConfig .
+
+  ar:cond_os_supported a ar:Requirement .
+  ar:cond_runtime_installed a ar:Requirement .
+  ar:cond_model_installed a ar:Requirement .
+  ar:cond_output_path_writable a ar:Requirement .
+
+  ar:op_sherpa_download a ar:Operation ; ar:invokedThroughKind ar:NanoClawContainerShellExecution ;
+    ar:mayInitiateInternetCall ar:call_sherpa_runtime_download, ar:call_sherpa_model_download ;
+    ar:targetsKind ar:RuntimeReleaseHost, ar:VoiceModelReleaseHost,
+      ar:RuntimeReleaseArchive, ar:VoiceModelReleaseArchive,
+      ar:InstalledRuntime, ar:InstalledVoiceModel ; ar:requires ar:cond_os_supported ;
+    ar:sourceNote "The source's OpenClaw state path is translated to NanoClaw's persistent agent-group workspace. Download traffic may traverse OneCLI or direct egress depending on effective runtime policy." ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:RuntimeReleaseArchive, ar:VoiceModelReleaseArchive ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Install ; ar:affectsKind ar:InstalledRuntime, ar:InstalledVoiceModel ] .
+
+  ar:call_sherpa_runtime_download a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ; ar:callViaKind ar:NanoClawContainerShellExecution, ar:NanoClawContainerNetworkRequest ;
+    ar:callEndpointKind ar:SherpaReleaseDownloadEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.6/{platform-runtime-archive}" ;
+    ar:sourceStatus ar:SkillText ; ar:sourceNote "The source lists OS-specific runtime archive URLs. The selected URL may redirect to a separate download host." .
+  ar:call_sherpa_model_download a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ; ar:callViaKind ar:NanoClawContainerShellExecution, ar:NanoClawContainerNetworkRequest ;
+    ar:callEndpointKind ar:SherpaReleaseDownloadEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-high.tar.bz2" ;
+    ar:sourceStatus ar:SkillText ; ar:sourceNote "The source gives this voice-model archive URL. CDN redirects may create additional calls to other endpoints." .
+
+  ar:op_sherpa_configure a ar:Operation ; ar:invokedThroughKind ar:NanoClawContainerShellExecution ;
+    ar:targetsKind ar:SkillEnvironmentConfig, ar:NanoClawAgentGroupWorkspace ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:sourceNote "NanoClaw has no equivalent generic skill-env config CLI in the inspected checkout; this adaptation uses a skill-owned file in persistent workspace." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Configure ; ar:affectsKind ar:SkillEnvironmentConfig ] .
+
+  ar:op_sherpa_synthesize a ar:Operation ; ar:invokedThroughKind ar:SherpaWrapperCLI, ar:SherpaRuntimeCLI ;
+    ar:targetsKind ar:VoiceInputText, ar:LocalAudioFile ;
+    ar:requires ar:cond_runtime_installed, ar:cond_model_installed, ar:cond_output_path_writable ;
+    ar:sourceNote "Inspected wrapper creates output parent directories and runs local sherpa runtime to write a WAV. The skill describes it as offline." ;
+    ar:sourceStatus ar:ScriptInspected ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:VoiceInputText ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:LocalAudioFile ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:LocalAudioFile ] .
+
+  ar:adapt_sherpa_download a ar:AdaptationMapping ;
+    ar:sourceAssumption "Download runtime/model into OpenClaw state." ;
+    ar:nanoclawModel "Download and extract into persistent agent-group workspace from the container." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "Execution depends on write access, architecture, and egress." ;
+    ar:adaptedOperation ar:op_sherpa_download .
+
+  ar:adapt_sherpa_configuration a ar:AdaptationMapping ;
+    ar:sourceAssumption "Configure skill environment with an OpenClaw config CLI." ;
+    ar:nanoclawModel "Write a skill-owned configuration file in persistent agent-group workspace." ;
+    ar:adaptationDisposition ar:ApproximateAdaptation ;
+    ar:semanticDifference "NanoClaw has no matching generic skill-environment configuration endpoint in the inspected checkout." ;
+    ar:adaptedOperation ar:op_sherpa_configure .
+
+  ar:adapt_sherpa_synthesis a ar:AdaptationMapping ;
+    ar:sourceAssumption "Run the wrapper locally and write WAV." ;
+    ar:nanoclawModel "Container shell runs the wrapper and writes workspace-visible audio." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "The translation is structurally compatible but remains conditional on the runtime, model, and writable output path." ;
+    ar:adaptedOperation ar:op_sherpa_synthesize .
+}

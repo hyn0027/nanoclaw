@@ -1,0 +1,72 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_nanoclaw_core {
+  ar:NanoClawCoreModule a ar:OntologyModule ;
+    ar:ontologyModuleId "nanoclaw-core" ;
+    ar:requiresOntologyModule "local-filesystem" ;
+    ar:sourceRepositoryPath "/Users/yhong3/Documents/Research/nanoclaw" ;
+    ar:sourceRevision "619dea195c10bf60c4e9e30577ff00a91e83746c" .
+
+  ar:NanoClawRuntime a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "The NanoClaw installation described by checkout 08ceb915e23fff1ec22a322cd44bb82294d9907b (branch customized: upstream 7902716b plus local commits). Types in this graph are architectural possibilities, not observations about a running instance or its configuration." ;
+    rdfs:seeAlso <https://github.com/hyn0027/nanoclaw/tree/08ceb915e23fff1ec22a322cd44bb82294d9907b> .
+  ar:NanoClawHostProcess a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Trusted host-side orchestrator for routing, authorization, persistence, container lifecycle, and delivery. Agents cannot run commands here; host-side effects of agent actions happen only through its fixed code paths." .
+  ar:NanoClawCentralDatabase a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Host-owned central state for agent groups, users, roles, wirings, sessions, and configuration; the default checkout uses data/v2.db." .
+  ar:NanoClawAgentGroup a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    rdfs:comment "Persistent agent identity and shared scope for configuration, workspace, instructions, memory, and gateway identity. It is not a team of agents." .
+  ar:NanoClawSession a ar:WorldSurfaceKind ;
+    rdfs:comment "Conversation/execution state with its own mailbox and container lifecycle, resolved from agent group + messaging group + thread. Several sessions can belong to one agent group; at most one container runs per session." .
+  ar:NanoClawTaskSession a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawSession ;
+    rdfs:comment "Dedicated per-series session for a scheduled task (no messaging group; thread system:tasks:<series>). Task runs execute here, not in the session that created the task." .
+  ar:NanoClawAgentContainer a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Per-session sandbox runtime managed by the selected session driver; the current default is a Docker container started from the agent group's image." .
+  ar:NanoClawAgentImage a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    rdfs:comment "Container image an agent group's sessions start from: the shared base image, or a per-group derived image that adds approved apt/npm packages. Rebuilt on host after an approved package installation." .
+  ar:NanoClawAgentRunner a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Container-side Bun process that polls the mailbox, prepares context, calls a provider, and records output." .
+  ar:NanoClawProviderRuntime a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Configured agent provider and its execution loop; provider behavior and tool policy are not identical across providers. Trunk registers only the Claude provider in the container; others are skill-installed." .
+  ar:NanoClawProviderSubagent a ar:WorldSurfaceKind ;
+    rdfs:comment "Helper agent started by the provider inside one session (e.g. the Claude Task tool). It runs in the same container process tree with the same files, network route, tools, and gateway identity as the main agent; it is not a NanoClaw agent group and adds no isolation." .
+  ar:NanoClawContainerConfiguration a ar:WorldSurfaceKind ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Per-agent container.json materialized by the host and mounted read-only in the container." .
+  ar:NanoClawStandingInstructions a ar:WorldSurfaceKind ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    rdfs:comment "Host-composed project document such as CLAUDE.md, mounted read-only." .
+  ar:NanoClawPersistentMemory a ar:WorldSurfaceKind ;
+    ar:mayBeStoredAsKind ar:LocalDirectory ;
+    rdfs:comment "Long-lived memory tree shared by sessions belonging to the same agent group." .
+  ar:NanoClawConversationContinuation a ar:WorldSurfaceKind ;
+    rdfs:comment "Provider-specific continuation state, such as a resumable provider session identifier." .
+
+  ar:NanoClawProviderToolPolicyControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Provider-side tool policy. The Claude provider runs with bypassPermissions: every allowed tool call is auto-approved inside the container, with no per-call human approval. A fixed disallow list removes SDK tools that would bypass NanoClaw (Cron*, ScheduleWakeup, AskUserQuestion, SendMessage, plan/worktree tools); privileged effects are gated host-side instead." .
+
+  ar:NanoClawRuntime ar:containsKind ar:NanoClawHostProcess,
+    ar:NanoClawCentralDatabase, ar:NanoClawAgentGroup, ar:NanoClawSession,
+    ar:NanoClawAgentContainer .
+  ar:NanoClawAgentGroup ar:containsKind ar:NanoClawContainerConfiguration,
+    ar:NanoClawStandingInstructions, ar:NanoClawPersistentMemory,
+    ar:NanoClawAgentImage, ar:NanoClawSession .
+  ar:NanoClawSession ar:containsKind ar:NanoClawConversationContinuation,
+    ar:NanoClawAgentContainer .
+  ar:NanoClawAgentContainer ar:containsKind ar:NanoClawAgentRunner,
+    ar:NanoClawProviderRuntime .
+  ar:NanoClawProviderRuntime ar:containsKind ar:NanoClawProviderSubagent ;
+    ar:protectedByKind ar:NanoClawProviderToolPolicyControl .
+  ar:NanoClawSession ar:sharesKind ar:NanoClawPersistentMemory ;
+    rdfs:comment "Sessions in the same agent group may share group memory and working files; session separation alone is not a confidentiality boundary." .
+
+  # Host paths (relative to the checkout); the image lives in the Docker image store.
+  ar:NanoClawCentralDatabase ar:hostPathPattern "data/v2.db" .
+  ar:NanoClawAgentGroup ar:hostPathPattern "groups/{folder}" .
+  ar:NanoClawAgentImage ar:hostPathPattern "docker image {image}" .
+}

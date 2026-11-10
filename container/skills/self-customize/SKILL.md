@@ -13,7 +13,7 @@ You can modify your own environment. Different kinds of changes have different w
 
 - **Memory or standing instructions** → Edit `memory/` or `instructions.prepend.md` directly, no approval needed. The workspace is persisted on the host. The composed provider document (`CLAUDE.md` or `AGENTS.md`) is regenerated every spawn and must not be edited.
 - **System package (apt) or global npm package** → `install_packages`. Requires admin approval. On approval, image rebuild + container restart happen automatically.
-- **MCP server** → `add_mcp_server`. Requires admin approval. On approval, container restarts with the new server wired up (no rebuild — bun runs TS directly).
+- **MCP server** → a remote server's URL with `add_mcp_server({ name, url })`; or, for a local (stdio) server, `install_packages` first and then `add_mcp_server` with the installed command. Each request needs admin approval; the container restarts with the server wired up.
 - **Your source code or Dockerfile** → Delegate to a builder agent via `create_agent` (see below).
 - **A new specialist capability** → `create_agent` to spin up a dedicated agent for it.
 
@@ -64,7 +64,9 @@ The limits are **per builder task**, not per session. A 500-line feature is fine
 User: "Can you add a tool for reading RSS feeds?"
 
 1. Check [mcp.so](https://mcp.so) for an existing RSS MCP server
-2. If one exists → `add_mcp_server({ name: "rss", command: "npx", args: ["some-rss-mcp"] })` → admin approves → container restarts with the new server → done
+2. If one exists:
+   - it has a hosted endpoint → `add_mcp_server({ name: "rss", url: "https://…/mcp" })` → admin approves → container restarts → done
+   - it is a package → `install_packages({ npm: ["some-rss-mcp"], reason: "MCP server: rss" })` → admin approves (image rebuilt, container restarts) → find its command in the package's `bin` → `add_mcp_server({ name: "rss", command: "some-rss-mcp" })` → admin approves → done
 3. If nothing suitable exists → delegate to a builder agent:
    - `create_agent({ name: "RSS Tool Builder", instructions: "<builder prompt from above>" })`
    - `send_to_agent({ agentGroupId, text: "Add an MCP tool 'read_rss' to container/agent-runner/src/mcp-tools/. It should fetch an RSS URL and return the latest N items. Register it in mcp-tools/index.ts. Target: <200 new lines." })`
@@ -84,4 +86,4 @@ User: "Can you transcribe audio?"
 
 - **The change is for a one-off task** — just do it in your workspace, don't modify the container
 - **The request is ambiguous** — ask the user what they actually need before spinning up builders or requesting installs
-- **You don't know if it will work** — prototype in your workspace first (`pnpm install` in `/workspace/agent/`), then promote to container-level install if it proves useful
+- **You don't know if it will work** — say so and ask the user first. Package registries are blocked at runtime, so workspace installs (`pnpm install`, `npx`) fail; `install_packages` is the only way to add a package

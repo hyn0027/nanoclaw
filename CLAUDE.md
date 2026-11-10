@@ -306,6 +306,7 @@ This project uses pnpm with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspac
 | [docs/templates.md](docs/templates.md) | Agent templates: what they are, stamping via `ncl groups create --template` + the setup wizard, the OneCLI/MCP-credential model, supported providers, and how to contribute one |
 | [docs/hardened-image.md](docs/hardened-image.md) | Opt-in: pull the agent image from a registry instead of building it |
 | [docs/action-log.md](docs/action-log.md) | Per-session agent action log + `scripts/trace.ts` timeline viewer: what's recorded, how, limitations |
+| [docs/ontology-runtime.md](docs/ontology-runtime.md) | Per-session runtime ontology (`ontology/`, `src/modules/ontology-runtime/`): grows from skill/MCP/package changes and gateway-captured traffic |
 
 ## Container Build Cache
 

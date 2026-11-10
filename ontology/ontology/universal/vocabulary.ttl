@@ -1,0 +1,226 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ar:EndpointSurfaceOntology a owl:Ontology ;
+  rdfs:comment "Lightweight vocabulary for potential invocation surfaces, affected world surfaces, and skill-described operations. Assertions are claims, not verified runtime authority or guaranteed effects." .
+
+ar:Skill a rdfs:Class .
+ar:MCPServer a rdfs:Class ;
+  rdfs:comment "A third-party MCP server, modeled like a skill: each of its tools is an operation. Graphs live under ontology/mcp/ and are generated from a pinned snapshot of the server's tools/list and documentation." .
+ar:OntologyModule a rdfs:Class ;
+  rdfs:comment "A statically discoverable ontology graph and its load dependencies. Declaring a module does not cause dynamic loading." .
+ar:SurfaceKind a rdfs:Class .
+ar:InvocationSurfaceKind a rdfs:Class ; rdfs:subClassOf ar:SurfaceKind .
+ar:ToolEndpointKind a rdfs:Class ; rdfs:subClassOf ar:InvocationSurfaceKind ;
+  rdfs:comment "Class of callable tool-endpoint kinds. Membership does not assert that a concrete endpoint is enabled in a runtime." .
+ar:WorldSurfaceKind a rdfs:Class ; rdfs:subClassOf ar:SurfaceKind .
+ar:SystemComponentKind a rdfs:Class ; rdfs:subClassOf ar:WorldSurfaceKind ;
+  rdfs:comment "Architectural component kinds that may hold state, execute logic, or mediate access. Being a component kind does not assert that an instance is running." .
+ar:SecurityControlKind a rdfs:Class ; rdfs:subClassOf ar:WorldSurfaceKind ;
+  rdfs:comment "Configuration or enforcement mechanism relevant to reachability or authority. A declared control is not evidence that it is enabled or effective at runtime." .
+ar:MountAccessMode a rdfs:Class ;
+  rdfs:comment "Mode enforced by one mount, not an effective file permission or a skill grant." .
+ar:ReadOnlyMountMode a ar:MountAccessMode ; rdfs:label "read-only mount" .
+ar:ReadWriteMountMode a ar:MountAccessMode ; rdfs:label "read-write mount" .
+ar:Operation a rdfs:Class .
+ar:NativeCapability a rdfs:Class ;
+  rdfs:comment "Potential action of a loaded harness/tool endpoint independent of any skill. A capability is not an executed operation, runtime tool inventory, or authorization grant." .
+ar:PotentialEffect a rdfs:Class .
+ar:PotentialInternetCall a rdfs:Class ;
+  rdfs:comment "A possible outbound request to a public-Internet endpoint caused by an operation, possibly after local or host mediation. It is not an observed packet, a guaranteed call, or proof that the endpoint is reachable. Local mailbox, stdio, loopback, and private-network hops do not themselves qualify." .
+ar:PublicInternetEndpointKind a rdfs:Class ; rdfs:subClassOf ar:WorldSurfaceKind ;
+  rdfs:comment "Class of destination kinds known to be publicly Internet-addressable. A service or resource is not automatically an endpoint. Specific endpoint kinds must also specialize ar:PublicInternetEndpoint." .
+ar:InternetCallStage a rdfs:Class .
+ar:EffectType a rdfs:Class .
+ar:Requirement a rdfs:Class .
+ar:requiresContainerCommand a rdf:Property ; rdfs:domain ar:Requirement ; rdfs:range xsd:string ;
+  rdfs:comment "Command that must be on the session container's PATH for the requirement to hold (checked with command -v)." .
+ar:requiresCredentialForHost a rdf:Property ; rdfs:domain ar:Requirement ; rdfs:range xsd:string ;
+  rdfs:comment "Host for which the gateway must hold a stored credential granted to the agent for the requirement to hold." .
+ar:EvidenceStatus a rdfs:Class .
+ar:AdaptationMapping a rdfs:Class ;
+  rdfs:comment "Auditable crosswalk from one source-skill assumption or action to its NanoClaw interpretation." .
+ar:AdaptationDisposition a rdfs:Class .
+ar:AdaptationPolicy a rdfs:Class .
+
+ar:declaresOperation a rdf:Property ; rdfs:range ar:Operation ;
+  rdfs:comment "Operation a skill or an MCP server makes available." .
+ar:mcpServerId a rdf:Property ; rdfs:domain ar:MCPServer ; rdfs:range xsd:string ;
+  rdfs:comment "Ontology ID of an MCP server graph (manifest key)." .
+ar:mcpEndpointPattern a rdf:Property ; rdfs:domain ar:MCPServer ; rdfs:range xsd:string ;
+  rdfs:comment "URL pattern (* wildcard) a configured MCP server's URL must match for this graph to apply to it." .
+ar:entityMappingPath a rdf:Property ; rdfs:domain ar:MCPServer ; rdfs:range xsd:string ;
+  rdfs:comment "Authored tool-to-entity mapping an MCP server graph was generated from (relative to the repository)." .
+ar:entityMappingSha256 a rdf:Property ; rdfs:domain ar:MCPServer ; rdfs:range xsd:string ;
+  rdfs:comment "SHA-256 of the entity mapping; the graph is stale when it differs." .
+ar:mcpToolName a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range xsd:string ;
+  rdfs:comment "Name of the MCP tool an operation is (the params.name of its tools/call request)." .
+ar:mcpToolMethod a rdf:Property ; rdfs:domain ar:PotentialEffect ; rdfs:range xsd:string ;
+  rdfs:comment "Value of the MCP tool's method (or action) argument under which this effect occurs, for tools that bundle several actions." .
+ar:mcpToolset a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "Toolset an MCP tool (operation) or a resource kind belongs to, as the server's documentation names it." .
+ar:ontologyModuleId a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string .
+ar:requiresOntologyModule a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "Static identifier of an ontology module required by a skill or another module. The loader validates this metadata against load-config.json but never loads it dynamically." .
+ar:resourcesOnly a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:boolean .
+ar:sourceRepositoryPath a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string .
+ar:sourceRevision a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string .
+ar:skillDirectory a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range xsd:string .
+ar:sourceSha256 a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range xsd:string .
+ar:hasAdaptationMapping a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range ar:AdaptationMapping .
+ar:governedByAdaptationPolicy a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range ar:AdaptationPolicy .
+ar:sourceAssumption a rdf:Property ; rdfs:domain ar:AdaptationMapping ; rdfs:range xsd:string .
+ar:nanoclawModel a rdf:Property ; rdfs:domain ar:AdaptationMapping ; rdfs:range xsd:string .
+ar:adaptationDisposition a rdf:Property ; rdfs:domain ar:AdaptationMapping ; rdfs:range ar:AdaptationDisposition .
+ar:semanticDifference a rdf:Property ; rdfs:domain ar:AdaptationMapping ; rdfs:range xsd:string .
+ar:adaptedOperation a rdf:Property ; rdfs:domain ar:AdaptationMapping ; rdfs:range ar:Operation .
+ar:specializesKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "A narrower resource kind. Multiple parents are allowed. The loader projects this relation into rdfs:subClassOf in its OWL reasoning graph." .
+ar:specializesInvocationKind a rdf:Property ;
+  rdfs:domain ar:InvocationSurfaceKind ; rdfs:range ar:InvocationSurfaceKind ;
+  rdfs:comment "A narrower action channel or execution mechanism. The loader projects it into rdfs:subClassOf in its OWL reasoning graph; it is not a resource containment relation." .
+ar:mayBeStoredAsKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Possible physical storage representation, not an identity or guaranteed effect." .
+ar:sourcePath a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range xsd:string .
+ar:sourceStatus a rdf:Property ; rdfs:range ar:EvidenceStatus .
+ar:adaptationStatus a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:EvidenceStatus ;
+  rdfs:comment "Evidence status for an environment-specific translation, kept separate from the source evidence for the operation." .
+ar:sourceNote a rdf:Property ; rdfs:range xsd:string .
+ar:invokedThroughKind a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:InvocationSurfaceKind .
+ar:nativeEndpointKind a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:InvocationSurfaceKind .
+ar:nativeResourceKind a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:WorldSurfaceKind .
+ar:nativeEffectType a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:EffectType .
+ar:nativeScopeKind a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Potential scope for the capability, not a claim that a concrete resource in that scope is accessible." .
+ar:nativeRequires a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:Requirement .
+ar:refinesCapability a rdf:Property ; rdfs:domain ar:NativeCapability ; rdfs:range ar:NativeCapability ;
+  rdfs:comment "A provider-specific capability that states more precisely what a generic native capability means for one concrete tool. When refinements are loaded, a runtime assessment reports the refinements instead of the generic capability." .
+ar:providerToolName a rdf:Property ; rdfs:domain ar:InvocationSurfaceKind ; rdfs:range xsd:string ;
+  rdfs:comment "Exact name under which a provider exposes this tool (e.g. Claude's \"Bash\"); used to match a deployment's tool allow and deny lists." .
+ar:requiresProviderTool a rdf:Property ; rdfs:domain ar:Requirement ; rdfs:range xsd:string ;
+  rdfs:comment "The requirement holds only when the provider tool with this exact name is enabled for the session." .
+ar:satisfiedByEndpointKind a rdf:Property ; rdfs:domain ar:Requirement ; rdfs:range ar:InvocationSurfaceKind ;
+  rdfs:comment "The requirement holds when at least one enabled provider tool specializes this endpoint kind (e.g. the generic shell requirement holds when Claude's Bash is enabled)." .
+ar:routesToKind a rdf:Property ; rdfs:range ar:SurfaceKind .
+ar:protectedByKind a rdf:Property ; rdfs:domain ar:SurfaceKind ; rdfs:range ar:SecurityControlKind ;
+  rdfs:comment "A type-level protection or policy relationship. Runtime configuration and enforcement must be observed separately." .
+ar:subjectToControlKind a rdf:Property ; rdfs:range ar:SecurityControlKind ;
+  rdfs:comment "A candidate control relevant to some paths described by a skill. Controls listed on one skill are not all conjunctive, do not apply to every operation, and do not assert approval." .
+ar:mountExposesKind a rdf:Property ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "A mount kind exposes a resource kind in the container namespace. A type-level claim is not evidence of a live mount or individual file access." .
+ar:mountAccessMode a rdf:Property ; rdfs:range ar:MountAccessMode ;
+  rdfs:comment "Mount-layer access mode. Nested mounts override parent mount modes at their target paths; OS permissions and provider policy may restrict access further." .
+ar:mountPrincipalKind a rdf:Property ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Architectural principal whose container namespace receives the mount, not a concrete authenticated identity." .
+ar:mountConditionalOn a rdf:Property ; rdfs:range ar:Requirement ;
+  rdfs:comment "Condition required for a conditional mount or mode; the graph does not assert that it holds in a running session." .
+ar:locatedOn a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:SystemComponentKind ;
+  rdfs:comment "The component whose namespace holds instances of this resource kind (the agent container, the NanoClaw host, the OneCLI gateway, or the external network beyond the local machine). Inherited along specializesKind unless a narrower kind states its own. A container-side kind is a view as seen inside the container; its host-side backing, if any, is a separate kind reached through a mount's bindsFromKind." .
+ar:executesOn a rdf:Property ; rdfs:domain ar:InvocationSurfaceKind ; rdfs:range ar:SystemComponentKind ;
+  rdfs:comment "The component on which this invocation kind runs. Inherited along specializesInvocationKind unless a narrower kind states its own." .
+ar:bindsFromKind a rdf:Property ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Host-side location a mount kind makes visible inside the container. A write through the container view changes this host location; the host side may also have writers the container does not see." .
+ar:containerPath a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "Absolute path at which a mount kind appears inside the container; a trailing * marks a prefix (e.g. /workspace/extra/*)." .
+ar:hostPathPattern a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "Path template of a host-side location relative to the NanoClaw checkout ({agentGroupId}, {sessionId}, {folder} are placeholders; {image} is the session container's image for kinds kept in the Docker image store). Absolute patterns are outside the checkout." .
+ar:mayResideInKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Plausible location of instances of a file/resource kind; does not assert that every instance exists there or inherits its container's permission." .
+ar:sharesKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Possible shared state or resource scope. This is neither subtype nor containment and does not imply universal visibility." .
+ar:targetsKind a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:WorldSurfaceKind .
+ar:requires a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:Requirement .
+ar:hasPotentialEffect a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:PotentialEffect .
+ar:mayInitiateInternetCall a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:PotentialInternetCall ;
+  rdfs:comment "An explicit, evidence-backed may-relation. It is not inferred merely because an operation uses shell, MCP, a remote resource, or a message tool." .
+ar:callInitiatorKind a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range ar:WorldSurfaceKind .
+ar:callViaKind a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range ar:InvocationSurfaceKind .
+ar:callEndpointKind a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range ar:PublicInternetEndpointKind .
+ar:callEndpointPattern a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range xsd:string ;
+  rdfs:comment "A literal URL or protocol destination template only when supported by source. Variables in braces are placeholders, not resolved runtime destinations; redirects may add hosts." .
+ar:callStage a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range ar:InternetCallStage .
+ar:callConditionalOn a rdf:Property ; rdfs:domain ar:PotentialInternetCall ; rdfs:range ar:Requirement ;
+  rdfs:comment "A condition additional to the initiating operation's ar:requires values." .
+ar:effectType a rdf:Property ; rdfs:domain ar:PotentialEffect ; rdfs:range ar:EffectType .
+ar:stepEffectType a rdf:Property ; rdfs:domain ar:InvocationSurfaceKind ; rdfs:range ar:EffectType ;
+  rdfs:comment "Effect types a mediating invocation step has on the world kinds it routes to (routesToKind). Effects of native capabilities and skill operations are stated on those; this states what the step itself does when it runs." .
+ar:affectsKind a rdf:Property ; rdfs:domain ar:PotentialEffect ; rdfs:range ar:WorldSurfaceKind .
+ar:conditionalOn a rdf:Property ; rdfs:domain ar:PotentialEffect ; rdfs:range ar:Requirement .
+ar:mayEnable a rdf:Property ; rdfs:domain ar:Operation ; rdfs:range ar:Operation .
+ar:containsKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind .
+ar:mayTrigger a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ;
+  rdfs:comment "Event-driven reaction of the environment: when an instance of the subject kind undergoes ar:onEffectType, the environment itself may cause ar:effectType on ar:affectsKind (e.g. a pushed commit starting a workflow run). The object is an untyped node; rdfs:comment names the event." .
+ar:onEffectType a rdf:Property ; rdfs:range ar:EffectType ;
+  rdfs:comment "Effect on the subject kind that sets off an ar:mayTrigger reaction." .
+ar:triggerEvent a rdf:Property ; rdfs:range xsd:string ;
+  rdfs:comment "On an ar:mayTrigger node: the event name the reaction is subscribed by (e.g. GitHub's 'issues'). With ar:triggerHandlerKind, the reaction happens only where an instance of the handler kind lists this event." .
+ar:triggerHandlerKind a rdf:Property ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "On an ar:mayTrigger node: the kind whose instances subscribe to ar:triggerEvent (e.g. GitHubWorkflow); materialize narrows the reaction to the discovered instances that do." .
+ar:referencesKind a rdf:Property ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Possible association between resource kinds that is not containment: an instance may point to instances of the other kind (an issue to its labels, a pull request to its branches). Deleting the referring instance does not delete the referenced one." .
+ar:authoredByKind a rdf:Property ; rdfs:subPropertyOf ar:referencesKind ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "An instance may be authored by (created and attributed to) an instance of the other kind." .
+ar:assignedToKind a rdf:Property ; rdfs:subPropertyOf ar:referencesKind ; rdfs:domain ar:WorldSurfaceKind ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "An instance may be assigned to, or have as a member or reviewer, an instance of the other kind." .
+ar:concreteExampleOnly a rdf:Property ; rdfs:range xsd:boolean .
+
+ar:SkillText a ar:EvidenceStatus ; rdfs:label "asserted by skill text" .
+ar:MCPToolSchema a ar:EvidenceStatus ; rdfs:label "mapped from the MCP tool's description and input schema" ;
+  rdfs:comment "Effects on environment entities authored from the tool's description and input schema (method enums), in ontology/mcp/sources/<id>-entities.json; non-read-only tools also Transmit their arguments." .
+ar:MCPToolAnnotation a ar:EvidenceStatus ; rdfs:label "derived from the MCP server's tools/list annotations" ;
+  rdfs:comment "Effects follow the MCP ToolAnnotations defaults: readOnlyHint (default false) true gives Read; otherwise destructiveHint (default true) true gives Create, Update, Delete, and false gives Create (additive only); every non-read-only tool also Transmits its arguments." .
+ar:ScriptInspected a ar:EvidenceStatus ; rdfs:label "supported by inspected bundled script" .
+ar:ExampleOnly a ar:EvidenceStatus ; rdfs:label "illustrative example; not verified deployment" .
+ar:RuntimeUnverified a ar:EvidenceStatus ; rdfs:label "runtime presence and authority unverified" .
+ar:InferredForNanoClaw a ar:EvidenceStatus ;
+  rdfs:label "conservative NanoClaw adaptation; not asserted by the source skill" ;
+  rdfs:comment "The operation or route is a reviewed translation into the inspected NanoClaw architecture. It must not be read as a claim about the original skill or a deployed installation." .
+
+ar:NativeAdaptation a ar:AdaptationDisposition ;
+  rdfs:label "native" ;
+  rdfs:comment "An inspected NanoClaw endpoint has the relevant contract. Native classification still does not prove that the endpoint is deployed or authorized." .
+ar:ConditionalAdaptation a ar:AdaptationDisposition ;
+  rdfs:label "conditional" ;
+  rdfs:comment "Behavior depends on provider tools, installed adapters, mounts, credentials, configuration, or policy." .
+ar:ApproximateAdaptation a ar:AdaptationDisposition ;
+  rdfs:label "approximation" ;
+  rdfs:comment "NanoClaw lacks the same abstraction, so the translated workflow has materially different semantics." .
+ar:UnsupportedAdaptation a ar:AdaptationDisposition ;
+  rdfs:label "unsupported or omitted" ;
+  rdfs:comment "No matching built-in NanoClaw endpoint was found; the operation is omitted unless an additional endpoint is introduced." .
+
+ar:NanoClawSkillAdaptationPolicy a ar:AdaptationPolicy ;
+  rdfs:label "NanoClaw skill-ontology adaptation policy" ;
+  rdfs:comment "Records where source skills differ from their ontology translation. It is an audit model, not executable skill text. Source skills span several environments and some explicitly assume OpenClaw; mappings describe plausible execution in NanoClaw revision 08ceb915e23fff1ec22a322cd44bb82294d9907b." ;
+  ar:sourceNote "Every adapted operation uses ar:adaptationStatus ar:InferredForNanoClaw while ar:sourceStatus independently records skill-text, inspected-script, or example evidence. Effects are conservative possibilities, not proof of deployment, permission, successful execution, or behavioral equivalence. An absent exact endpoint must be omitted or represented as an explicit approximation with its requirements; the model must not silently widen NanoClaw's interface." .
+
+ar:Read a ar:EffectType ; rdfs:comment "Access or obtain information; does not assert world-state mutation." .
+ar:Create a ar:EffectType .
+ar:Update a ar:EffectType .
+ar:Delete a ar:EffectType .
+ar:Transmit a ar:EffectType ; rdfs:comment "Data sent to another surface, without asserting a human read it." .
+ar:Execute a ar:EffectType .
+ar:Configure a ar:EffectType .
+ar:Authenticate a ar:EffectType .
+ar:Install a ar:EffectType .
+ar:Delegate a ar:EffectType .
+ar:Validate a ar:EffectType .
+ar:Notify a ar:EffectType .
+
+ar:ContainerEgress a ar:InternetCallStage ; rdfs:comment "The agent container initiates the outbound connection; proxy and direct routes are alternatives." .
+ar:HostAdapterEgress a ar:InternetCallStage ; rdfs:comment "A host messaging adapter initiates the outbound connection after local mailbox delivery." .
+ar:DelegatedWorkerEgress a ar:InternetCallStage ; rdfs:comment "A separately launched or delegated worker initiates the request; its actual tool choices remain open-ended." .
+
+# Cross-skill kinds are types, not claims that the harness exposes them.
+ar:SubagentSpawnTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+  ar:specializesInvocationKind ar:ToolEndpoint .
+ar:ProcessControlTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+  ar:specializesInvocationKind ar:ToolEndpoint .
+ar:ProcessEnvironment a ar:WorldSurfaceKind .
+ar:ExternalService a ar:WorldSurfaceKind .
+ar:Credential a ar:WorldSurfaceKind .
+ar:HumanRecipient a ar:WorldSurfaceKind ;
+  rdfs:comment "Potential downstream recipient; a send operation does not prove attention or behavior." .

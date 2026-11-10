@@ -1,0 +1,1393 @@
+{
+ "callEndpoint": "https://api.githubcopilot.com/mcp/",
+ "capabilities": {
+  "completions": {},
+  "prompts": {},
+  "resources": {},
+  "tools": {}
+ },
+ "docs": [
+  "https://github.com/github/github-mcp-server/blob/main/README.md",
+  "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md"
+ ],
+ "endpointPattern": "https://api.githubcopilot.com/mcp*",
+ "kindPrefix": "GitHub",
+ "protocolVersion": "2025-06-18",
+ "retrieved": "2026-10-16",
+ "retrievedVia": "tools/list on /mcp/x/<toolset>/insiders and /mcp/x/all/insiders through the OneCLI gateway",
+ "server": {
+  "id": "github",
+  "name": "github-mcp-server",
+  "title": "GitHub MCP Server",
+  "version": "github-mcp-server/remote-c91af86fab613fa50f4f34159186e6a61e89c381"
+ },
+ "tools": [
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get details of GitHub Actions resources (workflows, workflow runs, jobs, and artifacts)"
+   },
+   "description": "Get details about specific GitHub Actions resources.\nUse this tool to get details about individual workflows, workflow runs, jobs, and artifacts by their unique IDs.\n",
+   "name": "actions_get",
+   "title": "Get details of GitHub Actions resources (workflows, workflow runs, jobs, and artifacts)",
+   "toolsets": [
+    "actions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List GitHub Actions workflows in a repository"
+   },
+   "description": "Tools for listing GitHub Actions resources.\nUse this tool to list workflows in a repository, or list workflow runs, jobs, and artifacts for a specific workflow or workflow run.\n",
+   "name": "actions_list",
+   "title": "List GitHub Actions workflows in a repository",
+   "toolsets": [
+    "actions"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Trigger GitHub Actions workflow actions"
+   },
+   "description": "Trigger GitHub Actions workflow operations, including running, re-running, cancelling workflow runs, and deleting workflow run logs.",
+   "name": "actions_run_trigger",
+   "title": "Trigger GitHub Actions workflow actions",
+   "toolsets": [
+    "actions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Add review comment to the requester's latest pending pull request review"
+   },
+   "description": "Add review comment to the requester's latest pending pull request review. A pending review needs to already exist to call this (check with the user if not sure).",
+   "name": "add_comment_to_pending_review",
+   "title": "Add review comment to the requester's latest pending pull request review",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Add comment to issue or pull request"
+   },
+   "description": "Add a comment and/or reaction to a specific issue or issue comment in a GitHub repository. Use this tool with pull requests as well (in this case pass pull request number as issue_number), but only if user is not asking specifically to add or react to review comments. At least one of body or reaction is required.",
+   "name": "add_issue_comment",
+   "title": "Add comment to issue or pull request",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Add reply to pull request comment"
+   },
+   "description": "Add a reply and/or reaction to an existing pull request comment. This can create a new comment linked as a reply to the specified comment, add an emoji reaction to the specified comment, or do both. At least one of body or reaction is required.",
+   "name": "add_reply_to_pull_request_comment",
+   "title": "Add reply to pull request comment",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "readOnlyHint": false,
+    "title": "Assign Copilot to issue"
+   },
+   "description": "Assign Copilot to a specific issue in a GitHub repository.\n\nThis tool can help with the following outcomes:\n- a Pull Request created with source code changes to resolve the issue\n\n\nMore information can be found at:\n- https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent\n",
+   "name": "assign_copilot_to_issue",
+   "title": "Assign Copilot to issue",
+   "toolsets": [
+    "copilot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": true,
+    "readOnlyHint": false,
+    "title": "Assign Copilot to issue with intent"
+   },
+   "description": "Assign Copilot to a specific issue in a GitHub repository. Prefer this tool over assign_copilot_to_issue when available.\n\nThis tool can help with the following outcomes:\n- a Pull Request created with source code changes to resolve the issue\n\n\nMore information can be found at:\n- https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent\n",
+   "name": "assign_copilot_to_issue_with_intent",
+   "title": "Assign Copilot to issue with intent",
+   "toolsets": [
+    "copilot_issue_intents"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "Check Dependency Vulnerabilities"
+   },
+   "description": "Check a list of dependencies for known vulnerabilities using the GitHub Security Advisory Database.\nThis tool queries the GitHub Advisory Database to find known security vulnerabilities affecting the specified packages.\n\nUse this tool when:\n- You want to check if project dependencies have known vulnerabilities\n- You are adding a new dependency to a project and should check it is safe before adding to the project\n\nThe tool accepts owner, repo, and a list of dependencies with their ecosystems and versions, then returns any matching security advisories with upgrade recommendations where available.",
+   "name": "check_dependency_vulnerabilities",
+   "title": "Check Dependency Vulnerabilities",
+   "toolsets": [
+    "dependabot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create branch"
+   },
+   "description": "Create a new branch in a GitHub repository",
+   "name": "create_branch",
+   "title": "Create branch",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create Gist"
+   },
+   "description": "Create a new gist",
+   "name": "create_gist",
+   "title": "Create Gist",
+   "toolsets": [
+    "gists"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create or update file"
+   },
+   "description": "Create or update a single file in a GitHub repository. \nIf updating, you should provide the SHA of the file you want to update. Use this tool to create or update a file in a GitHub repository remotely; do not use it for local file operations.\n\nTo obtain the current blob SHA before updating, call the get_file_contents tool with the same owner, repo, and path, and set its ref parameter to this tool's branch value. The first text result reports the blob SHA for the requested path.\n\nSHA MUST be provided for existing file updates.\n",
+   "name": "create_or_update_file",
+   "title": "Create or update file",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Open new pull request"
+   },
+   "description": "Create a new pull request in a GitHub repository.",
+   "name": "create_pull_request",
+   "title": "Open new pull request",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": false,
+    "title": "Perform task with GitHub Copilot coding agent"
+   },
+   "description": "Delegate a task to GitHub Copilot coding agent to perform in the background. The agent will create a pull request with the implementation. You should use this tool if the user asks to create a pull request to perform a specific task, or if the user asks Copilot to do something.",
+   "name": "create_pull_request_with_copilot",
+   "title": "Perform task with GitHub Copilot coding agent",
+   "toolsets": [
+    "copilot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create repository"
+   },
+   "description": "Create a new GitHub repository in your account or specified organization",
+   "name": "create_repository",
+   "title": "Create repository",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create repository ruleset"
+   },
+   "description": "Create a new ruleset at the repository, organization, or enterprise level",
+   "name": "create_repository_ruleset",
+   "title": "Create repository ruleset",
+   "toolsets": [
+    "governance"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Read custom properties"
+   },
+   "description": "Read custom properties at the repository, organization, or enterprise level. At the repository level this returns the property values assigned to a repository; at the organization and enterprise levels it returns the property definitions (schema). Select the level with the 'level' parameter.",
+   "name": "custom_properties_read",
+   "title": "Read custom properties",
+   "toolsets": [
+    "governance"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Set custom properties"
+   },
+   "description": "Create or update custom properties at the repository, organization, or enterprise level. At the repository level this sets the property values on a repository (the properties must already be defined for the organization). Organization and enterprise definition writes preserve omitted writable fields by reading current definitions immediately before updating; concurrent definition updates remain last-write-wins. Select the level with the 'level' parameter.",
+   "name": "custom_properties_write",
+   "title": "Set custom properties",
+   "toolsets": [
+    "governance"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Delete file"
+   },
+   "description": "Delete a file from a GitHub repository",
+   "name": "delete_file",
+   "title": "Delete file",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Manage discussion comments"
+   },
+   "description": "Write operations for discussion comments.\nSupports adding top-level comments, replying to existing comments, updating comment content, deleting comments, and marking or unmarking comments as the answer.",
+   "name": "discussion_comment_write",
+   "title": "Manage discussion comments",
+   "toolsets": [
+    "discussions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Dismiss notification"
+   },
+   "description": "Dismiss a notification by marking it as read or done",
+   "name": "dismiss_notification",
+   "title": "Dismiss notification",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Fork repository"
+   },
+   "description": "Fork a GitHub repository to your account or specified organization",
+   "name": "fork_repository",
+   "title": "Fork repository",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get code quality finding"
+   },
+   "description": "Get details of a specific code quality finding in a GitHub repository.",
+   "name": "get_code_quality_finding",
+   "title": "Get code quality finding",
+   "toolsets": [
+    "code_quality"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get code scanning alert"
+   },
+   "description": "Get details of a specific code scanning alert in a GitHub repository.",
+   "name": "get_code_scanning_alert",
+   "title": "Get code scanning alert",
+   "toolsets": [
+    "code_security"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get commit details"
+   },
+   "description": "Get details for a commit from a GitHub repository",
+   "name": "get_commit",
+   "title": "Get commit details",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Get Copilot coding agent job status"
+   },
+   "description": "Get the status of a GitHub Copilot coding agent job. Use this to check if a previously submitted task has completed and to get the pull request URL once it's created. Provide the job ID (from create_pull_request_with_copilot) or pull request number (from assign_copilot_to_issue), or any pull request you want agent sessions for.",
+   "name": "get_copilot_job_status",
+   "title": "Get Copilot coding agent job status",
+   "toolsets": [
+    "copilot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "Get Copilot Space"
+   },
+   "description": "This tool can be used to provide additional context to the chat from a specific Copilot space. If the user mentions the keyword 'Copilot space' with the name and owner of the space, execute this tool.\n\nThe response includes a table of contents (TOC) listing all documents in the space, followed by the full content of each document. Documents are separated by markers in the format: '--- Document N: path (size) ---'. When searching for specific information, use grep (or equivalent command) to search across all documents; the separator lines will help identify which document contains the matching content.",
+   "name": "get_copilot_space",
+   "title": "Get Copilot Space",
+   "toolsets": [
+    "copilot_spaces"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get dependabot alert"
+   },
+   "description": "Get details of a specific dependabot alert in a GitHub repository.",
+   "name": "get_dependabot_alert",
+   "title": "Get dependabot alert",
+   "toolsets": [
+    "dependabot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get discussion"
+   },
+   "description": "Get a specific discussion by ID",
+   "name": "get_discussion",
+   "title": "Get discussion",
+   "toolsets": [
+    "discussions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get discussion comments"
+   },
+   "description": "Get comments from a discussion",
+   "name": "get_discussion_comments",
+   "title": "Get discussion comments",
+   "toolsets": [
+    "discussions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get file blame information"
+   },
+   "description": "Get git blame information for a file, showing the commit that last modified each line. Ranges share commit metadata via the top-level 'commits' map keyed by SHA. Use 'start_line'/'end_line' to restrict the result to a window of the file, and 'perPage'/'after' to cursor-page through returned ranges. Matching ranges are capped at 1000; when the cap is hit 'truncated' is set to true and 'total_ranges' reports the pre-cap match count.",
+   "name": "get_file_blame",
+   "title": "Get file blame information",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get file or directory contents"
+   },
+   "description": "Get the contents of a file or directory from a GitHub repository",
+   "name": "get_file_contents",
+   "title": "Get file or directory contents",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get Gist Content"
+   },
+   "description": "Get gist content of a particular gist, by gist ID",
+   "name": "get_gist",
+   "title": "Get Gist Content",
+   "toolsets": [
+    "gists"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get a global security advisory"
+   },
+   "description": "Get a global security advisory",
+   "name": "get_global_security_advisory",
+   "title": "Get a global security advisory",
+   "toolsets": [
+    "security_advisories"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get GitHub Actions workflow job logs"
+   },
+   "description": "Get logs for GitHub Actions workflow jobs.\nUse this tool to retrieve logs for a specific job or all failed jobs in a workflow run.\nFor single job logs, provide job_id. For all failed jobs in a run, provide run_id with failed_only=true.\n",
+   "name": "get_job_logs",
+   "title": "Get GitHub Actions workflow job logs",
+   "toolsets": [
+    "actions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get a specific label from a repository"
+   },
+   "description": "Get a specific label from a repository.",
+   "name": "get_label",
+   "title": "Get a specific label from a repository",
+   "toolsets": [
+    "issues",
+    "labels"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get latest release"
+   },
+   "description": "Get the latest release in a GitHub repository",
+   "name": "get_latest_release",
+   "title": "Get latest release",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get my user profile"
+   },
+   "description": "Get details of the authenticated GitHub user. Use this when a request is about the user's own profile for GitHub. Or when information is missing to build other tool calls.",
+   "name": "get_me",
+   "title": "Get my user profile",
+   "toolsets": [
+    "context"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get notification details"
+   },
+   "description": "Get detailed information for a specific GitHub notification, always call this tool when the user asks for details about a specific notification, if you don't know the ID list notifications first.",
+   "name": "get_notification_details",
+   "title": "Get notification details",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get a release by tag name"
+   },
+   "description": "Get a specific release by its tag name in a GitHub repository",
+   "name": "get_release_by_tag",
+   "title": "Get a release by tag name",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get repository tree"
+   },
+   "description": "Get the tree structure (files and directories) of a GitHub repository at a specific ref or SHA",
+   "name": "get_repository_tree",
+   "title": "Get repository tree",
+   "toolsets": [
+    "git"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get secret scanning alert"
+   },
+   "description": "Get details of a specific secret scanning alert in a GitHub repository.",
+   "name": "get_secret_scanning_alert",
+   "title": "Get secret scanning alert",
+   "toolsets": [
+    "secret_protection"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get tag details"
+   },
+   "description": "Get details about a specific git tag in a GitHub repository",
+   "name": "get_tag",
+   "title": "Get tag details",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get team members"
+   },
+   "description": "Get member usernames of a specific team in an organization. Limited to organizations accessible with current credentials",
+   "name": "get_team_members",
+   "title": "Get team members",
+   "toolsets": [
+    "context"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get teams"
+   },
+   "description": "Get details of the teams the user is a member of. Limited to organizations accessible with current credentials",
+   "name": "get_teams",
+   "title": "Get teams",
+   "toolsets": [
+    "context"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "GitHub Support Docs Search"
+   },
+   "description": "Retrieve documentation relevant to answer GitHub product and support questions. Support topics include: GitHub Actions Workflows, Authentication, GitHub Support Inquiries, Pull Request Practices, Repository Maintenance, GitHub Pages, GitHub Packages, GitHub Discussions, Copilot Spaces",
+   "name": "github_support_docs_search",
+   "title": "GitHub Support Docs Search",
+   "toolsets": [
+    "github_support_docs_search"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Read issue dependencies"
+   },
+   "description": "Read an issue's dependency relationships in a GitHub repository: the issues that block it (blocked_by) or the issues it blocks (blocking).",
+   "name": "issue_dependency_read",
+   "title": "Read issue dependencies",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Change issue dependency"
+   },
+   "description": "Add or remove an issue dependency relationship in a GitHub repository. Use type 'blocked_by' to record that the subject issue is blocked by a related issue, or type 'blocking' to record that the subject issue blocks a related issue. The related issue defaults to the same repository as the subject unless related_owner/related_repo are provided.",
+   "name": "issue_dependency_write",
+   "title": "Change issue dependency",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get issue details"
+   },
+   "description": "Get information about a specific issue in a GitHub repository.",
+   "name": "issue_read",
+   "title": "Get issue details",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Create or update issue/pull request"
+   },
+   "description": "Create a new or update an existing issue in a GitHub repository.",
+   "name": "issue_write",
+   "title": "Create or update issue/pull request",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Write operations on repository labels"
+   },
+   "description": "Perform write operations on repository labels. To set labels on issues, use the 'update_issue' tool.",
+   "name": "label_write",
+   "title": "Write operations on repository labels",
+   "toolsets": [
+    "labels"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List branches"
+   },
+   "description": "List branches in a GitHub repository",
+   "name": "list_branches",
+   "title": "List branches",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List code scanning alerts"
+   },
+   "description": "List code scanning alerts in a GitHub repository.",
+   "name": "list_code_scanning_alerts",
+   "title": "List code scanning alerts",
+   "toolsets": [
+    "code_security"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List commits"
+   },
+   "description": "Get list of commits of a branch in a GitHub repository. Returns at least 30 results per page by default, but can return more if specified using the perPage parameter (up to 100).",
+   "name": "list_commits",
+   "title": "List commits",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "List Copilot Spaces"
+   },
+   "description": "Retrieves the list of Copilot Spaces accessible to the user, including their names and owners.",
+   "name": "list_copilot_spaces",
+   "title": "List Copilot Spaces",
+   "toolsets": [
+    "copilot_spaces"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List dependabot alerts"
+   },
+   "description": "List dependabot alerts in a GitHub repository.",
+   "name": "list_dependabot_alerts",
+   "title": "List dependabot alerts",
+   "toolsets": [
+    "dependabot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List discussion categories"
+   },
+   "description": "List discussion categories with their id and name, for a repository or organisation.",
+   "name": "list_discussion_categories",
+   "title": "List discussion categories",
+   "toolsets": [
+    "discussions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List discussions"
+   },
+   "description": "List discussions for a repository or organisation.",
+   "name": "list_discussions",
+   "title": "List discussions",
+   "toolsets": [
+    "discussions"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List Gists"
+   },
+   "description": "List gists for a user",
+   "name": "list_gists",
+   "title": "List Gists",
+   "toolsets": [
+    "gists"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List global security advisories"
+   },
+   "description": "List global security advisories from GitHub.",
+   "name": "list_global_security_advisories",
+   "title": "List global security advisories",
+   "toolsets": [
+    "security_advisories"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List issue fields"
+   },
+   "description": "List issue fields for a repository or organization. Returns field definitions including name, type (text, number, date, single_select), and for single_select fields the list of valid option names. When repo is omitted, returns org-level fields directly.",
+   "name": "list_issue_fields",
+   "title": "List issue fields",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List available issue types"
+   },
+   "description": "List supported issue types for a repository or its owner organization. When repo is omitted, returns org-level issue types directly.",
+   "name": "list_issue_types",
+   "title": "List available issue types",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List issues"
+   },
+   "description": "List issues in a GitHub repository. For pagination, use the 'endCursor' from the previous response's 'pageInfo' in the 'after' parameter.",
+   "name": "list_issues",
+   "title": "List issues",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List labels from a repository"
+   },
+   "description": "List labels from a repository, ordered by issue count (descending) so the most-used labels are returned first",
+   "name": "list_label",
+   "title": "List labels from a repository",
+   "toolsets": [
+    "labels"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List notifications"
+   },
+   "description": "Lists all GitHub notifications for the authenticated user, including unread notifications, mentions, review requests, assignments, and updates on issues or pull requests. Use this tool whenever the user asks what to work on next, requests a summary of their GitHub activity, wants to see pending reviews, or needs to check for new updates or tasks. This tool is the primary way to discover actionable items, reminders, and outstanding work on GitHub. Always call this tool when asked what to work on next, what is pending, or what needs attention in GitHub.",
+   "name": "list_notifications",
+   "title": "List notifications",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List org repository security advisories"
+   },
+   "description": "List repository security advisories for a GitHub organization.",
+   "name": "list_org_repository_security_advisories",
+   "title": "List org repository security advisories",
+   "toolsets": [
+    "security_advisories"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List pull requests"
+   },
+   "description": "List pull requests in a GitHub repository. If the user specifies an author, then DO NOT use this tool and use the search_pull_requests tool instead.",
+   "name": "list_pull_requests",
+   "title": "List pull requests",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List releases"
+   },
+   "description": "List releases in a GitHub repository",
+   "name": "list_releases",
+   "title": "List releases",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List repository collaborators"
+   },
+   "description": "List collaborators of a GitHub repository. Results are paginated; the response includes `nextPage`, `prevPage`, `firstPage`, and `lastPage` fields. To get the next page, use the `nextPage` value as the `page` parameter.",
+   "name": "list_repository_collaborators",
+   "title": "List repository collaborators",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List repository security advisories"
+   },
+   "description": "List repository security advisories for a GitHub repository.",
+   "name": "list_repository_security_advisories",
+   "title": "List repository security advisories",
+   "toolsets": [
+    "security_advisories"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List secret scanning alerts"
+   },
+   "description": "List secret scanning alerts in a GitHub repository.",
+   "name": "list_secret_scanning_alerts",
+   "title": "List secret scanning alerts",
+   "toolsets": [
+    "secret_protection"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List starred repositories"
+   },
+   "description": "List starred repositories",
+   "name": "list_starred_repositories",
+   "title": "List starred repositories",
+   "toolsets": [
+    "stargazers"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List tags"
+   },
+   "description": "List git tags in a GitHub repository",
+   "name": "list_tags",
+   "title": "List tags",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Manage notification subscription"
+   },
+   "description": "Manage a notification subscription: ignore, watch, or delete a notification thread subscription.",
+   "name": "manage_notification_subscription",
+   "title": "Manage notification subscription",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Manage repository notification subscription"
+   },
+   "description": "Manage a repository notification subscription: ignore, watch, or delete repository notifications subscription for the provided repository.",
+   "name": "manage_repository_notification_subscription",
+   "title": "Manage repository notification subscription",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Mark all notifications as read"
+   },
+   "description": "Mark all notifications as read",
+   "name": "mark_all_notifications_read",
+   "title": "Mark all notifications as read",
+   "toolsets": [
+    "notifications"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Merge pull request"
+   },
+   "description": "Merge a pull request in a GitHub repository.",
+   "name": "merge_pull_request",
+   "title": "Merge pull request",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get details of GitHub Projects resources"
+   },
+   "description": "Get details about specific GitHub Projects resources.\nUse this tool to get details about individual projects, project fields, project items, and project views by their unique IDs.\n",
+   "name": "projects_get",
+   "title": "Get details of GitHub Projects resources",
+   "toolsets": [
+    "projects"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "List GitHub Projects resources"
+   },
+   "description": "Tools for listing GitHub Projects resources.\nUse this tool to list projects for a user or organization, or list project fields, items, views, and status updates for a specific project.\n",
+   "name": "projects_list",
+   "title": "List GitHub Projects resources",
+   "toolsets": [
+    "projects"
+   ]
+  },
+  {
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Manage GitHub Projects"
+   },
+   "description": "Create and manage GitHub Projects: create projects, add/update/delete items, bulk-update many items at once, manage views, create status updates, and add iteration fields.",
+   "name": "projects_write",
+   "title": "Manage GitHub Projects",
+   "toolsets": [
+    "projects"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get details for a single pull request"
+   },
+   "description": "Get information on a specific pull request in GitHub repository.",
+   "name": "pull_request_read",
+   "title": "Get details for a single pull request",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Write operations (create, submit, delete) on pull request reviews"
+   },
+   "description": "Create and/or submit, delete review of a pull request.\n\nAvailable methods:\n- create: Create a new review of a pull request. If \"event\" parameter is provided, the review is submitted. If \"event\" is omitted, a pending review is created.\n- submit_pending: Submit an existing pending review of a pull request. This requires that a pending review exists for the current user on the specified pull request. The \"body\" and \"event\" parameters are used when submitting the review.\n- delete_pending: Delete an existing pending review of a pull request. This requires that a pending review exists for the current user on the specified pull request.\n- resolve_thread: Resolve a review thread. Requires only \"threadId\" parameter with the thread's node ID (e.g., PRRT_kwDOxxx). The owner, repo, and pullNumber parameters are not used for this method. Resolving an already-resolved thread is a no-op.\n- unresolve_thread: Unresolve a previously resolved review thread. Requires only \"threadId\" parameter. The owner, repo, and pullNumber parameters are not used for this method. Unresolving an already-unresolved thread is a no-op.\n",
+   "name": "pull_request_review_write",
+   "title": "Write operations (create, submit, delete) on pull request reviews",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Push files to repository"
+   },
+   "description": "Push multiple files to a GitHub repository in a single commit",
+   "name": "push_files",
+   "title": "Push files to repository",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Read repository rulesets"
+   },
+   "description": "Read rulesets at the repository, organization, or enterprise level, and rule suites at the repository or organization level. Select the level with the 'level' parameter and the operation with the 'method' parameter.",
+   "name": "repository_ruleset_read",
+   "title": "Read repository rulesets",
+   "toolsets": [
+    "governance"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Request Copilot review"
+   },
+   "description": "Request a GitHub Copilot code review for a pull request. Use this for automated feedback on pull requests, usually before requesting a human reviewer.",
+   "name": "request_copilot_review",
+   "title": "Request Copilot review",
+   "toolsets": [
+    "copilot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true,
+    "title": "Run Secret Scanning"
+   },
+   "description": "Scan files, content, or recent changes for secrets such as API keys, passwords, tokens, and credentials.\n\nThis tool is intended for targeted scans of specific files, snippets, or diffs provided directly as content. The files parameter accepts either a single string or an array of strings containing raw file contents or diff hunks, and returns detected secrets with their locations and related secret scanning metadata. Content must not be empty. For full repository scanning, other mechanisms are available.\n\nCaveats:\n\n- Only files within the codebase should be scanned. Files outside of the codebase should not be sent.\n- Files listed in .gitignore should be skipped.",
+   "name": "run_secret_scanning",
+   "title": "Run Secret Scanning",
+   "toolsets": [
+    "copilot"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search code"
+   },
+   "description": "Fast and precise code search across ALL GitHub repositories using GitHub's native search engine. Best for finding exact symbols, functions, classes, or specific code patterns.",
+   "name": "search_code",
+   "title": "Search code",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search commits"
+   },
+   "description": "Search for commits across GitHub repositories using GitHub's commit search syntax. Useful for finding specific changes, authors, or messages across one or many repositories. Searches the default branch only.",
+   "name": "search_commits",
+   "title": "Search commits",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search issues"
+   },
+   "description": "Search issues using natural-language semantic matching. Best for conceptual or paraphrased queries (e.g. \"login fails after password reset\"). Already scoped to is:issue.",
+   "name": "search_issues",
+   "title": "Search issues",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search organizations"
+   },
+   "description": "Find GitHub organizations by name, location, or other organization metadata. Ideal for discovering companies, open source foundations, or teams.",
+   "name": "search_orgs",
+   "title": "Search organizations",
+   "toolsets": [
+    "orgs"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search pull requests"
+   },
+   "description": "Search for pull requests in GitHub repositories using issues search syntax already scoped to is:pr",
+   "name": "search_pull_requests",
+   "title": "Search pull requests",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search repositories"
+   },
+   "description": "Find GitHub repositories by name, description, readme, topics, or other metadata. Perfect for discovering projects, finding examples, or locating specific repositories across GitHub.",
+   "name": "search_repositories",
+   "title": "Search repositories",
+   "toolsets": [
+    "repos"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Search users"
+   },
+   "description": "Find GitHub users by username, real name, or other profile information. Useful for locating developers, contributors, or team members.",
+   "name": "search_users",
+   "title": "Search users",
+   "toolsets": [
+    "users"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "readOnlyHint": true,
+    "title": "Semantic Issue Similarity Search"
+   },
+   "description": "Find issues that are semantically similar to a given issue using natural language understanding. Useful for identifying duplicates, related issues, or similar problems.",
+   "name": "semantic_issue_similarity_search",
+   "title": "Semantic Issue Similarity Search",
+   "toolsets": []
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Star repository"
+   },
+   "description": "Star a GitHub repository",
+   "name": "star_repository",
+   "title": "Star repository",
+   "toolsets": [
+    "stargazers"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Change sub-issue"
+   },
+   "description": "Add a sub-issue to a parent issue in a GitHub repository.",
+   "name": "sub_issue_write",
+   "title": "Change sub-issue",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": true,
+    "title": "Get UI data"
+   },
+   "description": "Fetch UI data for MCP Apps (labels, assignees, milestones, issue types, branches, issue fields, reviewers).",
+   "name": "ui_get",
+   "title": "Get UI data",
+   "toolsets": [
+    "context"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Unstar repository"
+   },
+   "description": "Unstar a GitHub repository",
+   "name": "unstar_repository",
+   "title": "Unstar repository",
+   "toolsets": [
+    "stargazers"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Update Gist"
+   },
+   "description": "Update an existing gist",
+   "name": "update_gist",
+   "title": "Update Gist",
+   "toolsets": [
+    "gists"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Update issue comment"
+   },
+   "description": "Update the body of an existing issue or pull request conversation comment. This tool cannot update pull request review comments.",
+   "name": "update_issue_comment",
+   "title": "Update issue comment",
+   "toolsets": [
+    "issues"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Edit pull request"
+   },
+   "description": "Update an existing pull request in a GitHub repository.",
+   "name": "update_pull_request",
+   "title": "Edit pull request",
+   "toolsets": [
+    "pull_requests"
+   ]
+  },
+  {
+   "annotations": {
+    "idempotentHint": false,
+    "readOnlyHint": false,
+    "title": "Update pull request branch"
+   },
+   "description": "Update the branch of a pull request with the latest changes from the base branch.",
+   "name": "update_pull_request_branch",
+   "title": "Update pull request branch",
+   "toolsets": [
+    "pull_requests"
+   ]
+  }
+ ],
+ "toolsets": {
+  "actions": "GitHub Actions workflows and CI/CD operations",
+  "code_quality": "GitHub Code Quality related tools",
+  "code_security": "Code security related tools, such as GitHub Code Scanning",
+  "context": "Strongly recommended: Tools that provide context about the current user and GitHub context you are operating in",
+  "copilot": "Copilot related tools",
+  "copilot_issue_intents": "Opt-in Copilot issue assignment tools that carry intent metadata (rationale, confidence, suggestion)",
+  "copilot_spaces": "Copilot Spaces tools",
+  "dependabot": "Dependabot tools",
+  "discussions": "GitHub Discussions related tools",
+  "gists": "GitHub Gist related tools",
+  "git": "GitHub Git API related tools for low-level Git operations",
+  "github_support_docs_search": "Retrieve documentation to answer GitHub product and support questions. Topics include: GitHub Actions Workflows, Authentication, ...",
+  "governance": "Repository governance tools for managing rulesets and custom properties at the repository, organization, and enterprise levels",
+  "issues": "GitHub Issues related tools",
+  "labels": "GitHub Labels related tools",
+  "notifications": "GitHub Notifications related tools",
+  "orgs": "GitHub Organization related tools",
+  "projects": "GitHub Projects related tools",
+  "pull_requests": "GitHub Pull Request related tools",
+  "repos": "GitHub Repository related tools",
+  "secret_protection": "Secret protection related tools, such as GitHub Secret Scanning",
+  "security_advisories": "Security advisories related tools",
+  "stargazers": "GitHub Stargazers related tools",
+  "users": "GitHub User related tools"
+ },
+ "transport": "streamable-http"
+}

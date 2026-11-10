@@ -1,0 +1,1777 @@
+{
+ "basis": "Authored from each tool's description and input schema (method enums) in sources/github.json, against the entities of ontology/mcp/github-environment.trig. Effects are what the call does to those entities; non-read-only tools also Transmit their arguments.",
+ "environmentModule": "github-environment",
+ "server": "github",
+ "tools": {
+  "actions_get": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflow"
+    ],
+    "methods": [
+     "get_workflow"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowRun"
+    ],
+    "methods": [
+     "get_workflow_run",
+     "get_workflow_run_usage"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowJob"
+    ],
+    "methods": [
+     "get_workflow_job",
+     "get_workflow_run_logs_url"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowArtifact"
+    ],
+    "methods": [
+     "download_workflow_run_artifact"
+    ]
+   }
+  ],
+  "actions_list": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflow"
+    ],
+    "methods": [
+     "list_workflows"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowRun"
+    ],
+    "methods": [
+     "list_workflow_runs"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowJob"
+    ],
+    "methods": [
+     "list_workflow_jobs"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowArtifact"
+    ],
+    "methods": [
+     "list_workflow_run_artifacts"
+    ]
+   }
+  ],
+  "actions_run_trigger": [
+   {
+    "effects": [
+     "Create",
+     "Execute"
+    ],
+    "kinds": [
+     "GitHubWorkflowRun"
+    ],
+    "methods": [
+     "run_workflow"
+    ]
+   },
+   {
+    "effects": [
+     "Execute",
+     "Update"
+    ],
+    "kinds": [
+     "GitHubWorkflowRun"
+    ],
+    "methods": [
+     "rerun_workflow_run",
+     "rerun_failed_jobs"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubWorkflowRun"
+    ],
+    "methods": [
+     "cancel_workflow_run"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubWorkflowJob"
+    ],
+    "methods": [
+     "delete_workflow_run_logs"
+    ]
+   }
+  ],
+  "add_comment_to_pending_review": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubReviewComment"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": null
+   }
+  ],
+  "add_issue_comment": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubIssueComment",
+     "GitHubReaction"
+    ],
+    "methods": null
+   }
+  ],
+  "add_reply_to_pull_request_comment": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubReviewComment",
+     "GitHubReaction"
+    ],
+    "methods": null
+   }
+  ],
+  "assign_copilot_to_issue": [
+   {
+    "effects": [
+     "Create",
+     "Delegate"
+    ],
+    "kinds": [
+     "GitHubCopilotTask"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequest",
+     "GitHubBranch",
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "assign_copilot_to_issue_with_intent": [
+   {
+    "effects": [
+     "Create",
+     "Delegate"
+    ],
+    "kinds": [
+     "GitHubCopilotTask"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequest",
+     "GitHubBranch",
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "check_dependency_vulnerabilities": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecurityAdvisory"
+    ],
+    "methods": null
+   }
+  ],
+  "create_branch": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "create_gist": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubGist"
+    ],
+    "methods": null
+   }
+  ],
+  "create_or_update_file": [
+   {
+    "effects": [
+     "Create",
+     "Update"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "create_pull_request": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ],
+  "create_pull_request_with_copilot": [
+   {
+    "effects": [
+     "Create",
+     "Delegate"
+    ],
+    "kinds": [
+     "GitHubCopilotTask"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequest",
+     "GitHubBranch",
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "create_repository": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubRepository"
+    ],
+    "methods": null
+   }
+  ],
+  "create_repository_ruleset": [
+   {
+    "effects": [
+     "Create",
+     "Configure"
+    ],
+    "kinds": [
+     "GitHubRuleset"
+    ],
+    "methods": null
+   }
+  ],
+  "custom_properties_read": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCustomProperty"
+    ],
+    "methods": null
+   }
+  ],
+  "custom_properties_write": [
+   {
+    "effects": [
+     "Create",
+     "Update",
+     "Configure"
+    ],
+    "kinds": [
+     "GitHubCustomProperty"
+    ],
+    "methods": null
+   }
+  ],
+  "delete_file": [
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "discussion_comment_write": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubDiscussionComment"
+    ],
+    "methods": [
+     "add",
+     "reply"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubDiscussionComment"
+    ],
+    "methods": [
+     "update"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubDiscussionComment"
+    ],
+    "methods": [
+     "delete"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubDiscussionComment",
+     "GitHubDiscussion"
+    ],
+    "methods": [
+     "mark_answer",
+     "unmark_answer"
+    ]
+   }
+  ],
+  "dismiss_notification": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": null
+   }
+  ],
+  "fork_repository": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubRepository"
+    ],
+    "methods": null
+   }
+  ],
+  "get_code_quality_finding": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCodeQualityFinding"
+    ],
+    "methods": null
+   }
+  ],
+  "get_code_scanning_alert": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCodeScanningAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "get_commit": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCommit",
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   }
+  ],
+  "get_copilot_job_status": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCopilotTask",
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ],
+  "get_copilot_space": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCopilotSpace"
+    ],
+    "methods": null
+   }
+  ],
+  "get_dependabot_alert": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDependabotAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "get_discussion": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDiscussion"
+    ],
+    "methods": null
+   }
+  ],
+  "get_discussion_comments": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDiscussionComment"
+    ],
+    "methods": null
+   }
+  ],
+  "get_file_blame": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile",
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "get_file_contents": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   }
+  ],
+  "get_gist": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubGist"
+    ],
+    "methods": null
+   }
+  ],
+  "get_global_security_advisory": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecurityAdvisory"
+    ],
+    "methods": null
+   }
+  ],
+  "get_job_logs": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubWorkflowJob"
+    ],
+    "methods": null
+   }
+  ],
+  "get_label": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": null
+   }
+  ],
+  "get_latest_release": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRelease"
+    ],
+    "methods": null
+   }
+  ],
+  "get_me": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubUser"
+    ],
+    "methods": null
+   }
+  ],
+  "get_notification_details": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": null
+   }
+  ],
+  "get_release_by_tag": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRelease",
+     "GitHubTag"
+    ],
+    "methods": null
+   }
+  ],
+  "get_repository_tree": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   }
+  ],
+  "get_secret_scanning_alert": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecretScanningAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "get_tag": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubTag"
+    ],
+    "methods": null
+   }
+  ],
+  "get_team_members": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubTeam",
+     "GitHubUser"
+    ],
+    "methods": null
+   }
+  ],
+  "get_teams": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubTeam"
+    ],
+    "methods": null
+   }
+  ],
+  "github_support_docs_search": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDocumentation"
+    ],
+    "methods": null
+   }
+  ],
+  "issue_dependency_read": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   }
+  ],
+  "issue_dependency_write": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": [
+     "add",
+     "remove"
+    ]
+   }
+  ],
+  "issue_read": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": [
+     "get",
+     "get_sub_issues",
+     "get_parent"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssueComment"
+    ],
+    "methods": [
+     "get_comments"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": [
+     "get_labels"
+    ]
+   }
+  ],
+  "issue_write": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": [
+     "create"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": [
+     "update"
+    ]
+   }
+  ],
+  "label_write": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": [
+     "create"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": [
+     "update"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": [
+     "delete"
+    ]
+   }
+  ],
+  "list_branches": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "list_code_scanning_alerts": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCodeScanningAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "list_commits": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "list_copilot_spaces": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCopilotSpace"
+    ],
+    "methods": null
+   }
+  ],
+  "list_dependabot_alerts": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDependabotAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "list_discussion_categories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDiscussionCategory"
+    ],
+    "methods": null
+   }
+  ],
+  "list_discussions": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubDiscussion"
+    ],
+    "methods": null
+   }
+  ],
+  "list_gists": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubGist"
+    ],
+    "methods": null
+   }
+  ],
+  "list_global_security_advisories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecurityAdvisory"
+    ],
+    "methods": null
+   }
+  ],
+  "list_issue_fields": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssueTypeOrField"
+    ],
+    "methods": null
+   }
+  ],
+  "list_issue_types": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssueTypeOrField"
+    ],
+    "methods": null
+   }
+  ],
+  "list_issues": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   }
+  ],
+  "list_label": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": null
+   }
+  ],
+  "list_notifications": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": null
+   }
+  ],
+  "list_org_repository_security_advisories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecurityAdvisory"
+    ],
+    "methods": null
+   }
+  ],
+  "list_pull_requests": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ],
+  "list_releases": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRelease"
+    ],
+    "methods": null
+   }
+  ],
+  "list_repository_collaborators": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryCollaborator",
+     "GitHubUser"
+    ],
+    "methods": null
+   }
+  ],
+  "list_repository_security_advisories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecurityAdvisory"
+    ],
+    "methods": null
+   }
+  ],
+  "list_secret_scanning_alerts": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubSecretScanningAlert"
+    ],
+    "methods": null
+   }
+  ],
+  "list_starred_repositories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubStar",
+     "GitHubRepository"
+    ],
+    "methods": null
+   }
+  ],
+  "list_tags": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubTag"
+    ],
+    "methods": null
+   }
+  ],
+  "manage_notification_subscription": [
+   {
+    "effects": [
+     "Update",
+     "Configure"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": [
+     "ignore",
+     "watch"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": [
+     "delete"
+    ]
+   }
+  ],
+  "manage_repository_notification_subscription": [
+   {
+    "effects": [
+     "Update",
+     "Configure"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": [
+     "ignore",
+     "watch"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": [
+     "delete"
+    ]
+   }
+  ],
+  "mark_all_notifications_read": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubNotification"
+    ],
+    "methods": null
+   }
+  ],
+  "merge_pull_request": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "projects_get": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubProject"
+    ],
+    "methods": [
+     "get_project"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubProjectItem"
+    ],
+    "methods": [
+     "get_project_field",
+     "get_project_item",
+     "get_project_status_update",
+     "get_project_view"
+    ]
+   }
+  ],
+  "projects_list": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubProject"
+    ],
+    "methods": [
+     "list_projects"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubProjectItem"
+    ],
+    "methods": [
+     "list_project_fields",
+     "list_project_items",
+     "list_project_status_updates",
+     "list_project_views"
+    ]
+   }
+  ],
+  "projects_write": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubProjectItem"
+    ],
+    "methods": [
+     "add_project_item",
+     "create_project_status_update",
+     "create_project_view",
+     "create_iteration_field"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubProjectItem"
+    ],
+    "methods": [
+     "update_project_item",
+     "update_project_items",
+     "update_project_view"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubProjectItem"
+    ],
+    "methods": [
+     "delete_project_item",
+     "delete_project_view"
+    ]
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubProject"
+    ],
+    "methods": [
+     "create_project"
+    ]
+   }
+  ],
+  "pull_request_read": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": [
+     "get"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": [
+     "get_diff",
+     "get_files"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCheckRun"
+    ],
+    "methods": [
+     "get_status",
+     "get_check_runs"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": [
+     "get_commits"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubReviewComment"
+    ],
+    "methods": [
+     "get_review_comments"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": [
+     "get_reviews"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssueComment"
+    ],
+    "methods": [
+     "get_comments"
+    ]
+   }
+  ],
+  "pull_request_review_write": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": [
+     "create"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": [
+     "submit_pending"
+    ]
+   },
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": [
+     "delete_pending"
+    ]
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubReviewComment"
+    ],
+    "methods": [
+     "resolve_thread",
+     "unresolve_thread"
+    ]
+   }
+  ],
+  "push_files": [
+   {
+    "effects": [
+     "Create",
+     "Update"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   }
+  ],
+  "repository_ruleset_read": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRuleset"
+    ],
+    "methods": null
+   }
+  ],
+  "request_copilot_review": [
+   {
+    "effects": [
+     "Create",
+     "Delegate"
+    ],
+    "kinds": [
+     "GitHubCopilotTask"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubPullRequestReview"
+    ],
+    "methods": null
+   }
+  ],
+  "run_secret_scanning": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   }
+  ],
+  "search_code": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepositoryFile"
+    ],
+    "methods": null
+   }
+  ],
+  "search_commits": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   }
+  ],
+  "search_issues": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   }
+  ],
+  "search_orgs": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubOrganization"
+    ],
+    "methods": null
+   }
+  ],
+  "search_pull_requests": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ],
+  "search_repositories": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubRepository"
+    ],
+    "methods": null
+   }
+  ],
+  "search_users": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubUser"
+    ],
+    "methods": null
+   }
+  ],
+  "semantic_issue_similarity_search": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   }
+  ],
+  "star_repository": [
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubStar"
+    ],
+    "methods": null
+   }
+  ],
+  "sub_issue_write": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssue"
+    ],
+    "methods": null
+   }
+  ],
+  "ui_get": [
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubLabel"
+    ],
+    "methods": [
+     "labels"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubUser"
+    ],
+    "methods": [
+     "assignees",
+     "reviewers"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubMilestone"
+    ],
+    "methods": [
+     "milestones"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubIssueTypeOrField"
+    ],
+    "methods": [
+     "issue_types",
+     "issue_fields"
+    ]
+   },
+   {
+    "effects": [
+     "Read"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": [
+     "branches"
+    ]
+   }
+  ],
+  "unstar_repository": [
+   {
+    "effects": [
+     "Delete"
+    ],
+    "kinds": [
+     "GitHubStar"
+    ],
+    "methods": null
+   }
+  ],
+  "update_gist": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubGist"
+    ],
+    "methods": null
+   }
+  ],
+  "update_issue_comment": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubIssueComment"
+    ],
+    "methods": null
+   }
+  ],
+  "update_pull_request": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ],
+  "update_pull_request_branch": [
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubBranch"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Create"
+    ],
+    "kinds": [
+     "GitHubCommit"
+    ],
+    "methods": null
+   },
+   {
+    "effects": [
+     "Update"
+    ],
+    "kinds": [
+     "GitHubPullRequest"
+    ],
+    "methods": null
+   }
+  ]
+ }
+}

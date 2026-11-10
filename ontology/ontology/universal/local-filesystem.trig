@@ -1,0 +1,38 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ar:g_local_filesystem {
+  ar:LocalFilesystemModule a ar:OntologyModule ;
+    ar:ontologyModuleId "local-filesystem" ;
+    ar:resourcesOnly true .
+
+  ar:LocalFileSystem a ar:WorldSurfaceKind ;
+    rdfs:comment "Abstract resource kind; concrete paths, mounts, sandbox boundaries, and permissions require runtime inventory." .
+  ar:LocalDirectory a ar:WorldSurfaceKind .
+  ar:LocalFile a ar:WorldSurfaceKind .
+  ar:LocalFileMetadata a ar:WorldSurfaceKind ;
+    rdfs:comment "Permissions, timestamps, ownership, and similar file or directory metadata." .
+  ar:LocalSymbolicLink a ar:WorldSurfaceKind .
+  ar:LocalFilesystemAccessControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Effective access may also depend on host/container OS identity, filesystem mode bits or ACLs, path traversal, and symlink resolution; no concrete permissions are inventoried here." .
+  ar:LocalFileSystem ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:LocalDirectory ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:LocalFile ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:LocalSymbolicLink ar:protectedByKind ar:LocalFilesystemAccessControl .
+  ar:FileSystemEntry a ar:WorldSurfaceKind, owl:Class ;
+    rdfs:comment "Concrete entry observed inside a directory. This instance-level class supports qualified structural definitions." .
+
+  ar:containsEntry a owl:ObjectProperty ;
+    rdfs:domain ar:LocalDirectory ; rdfs:range ar:FileSystemEntry ;
+    rdfs:comment "Instance-level directory membership; distinct from containsKind, which relates resource kinds." .
+  ar:entryName a owl:DatatypeProperty ;
+    rdfs:domain ar:FileSystemEntry ; rdfs:range xsd:string .
+
+  ar:LocalFileSystem ar:containsKind ar:LocalDirectory, ar:LocalFile,
+    ar:LocalSymbolicLink .
+  ar:LocalDirectory ar:containsKind ar:LocalDirectory, ar:LocalFile,
+    ar:LocalSymbolicLink, ar:LocalFileMetadata .
+  ar:LocalFile ar:containsKind ar:LocalFileMetadata .
+}

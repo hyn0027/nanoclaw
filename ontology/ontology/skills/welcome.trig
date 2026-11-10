@@ -1,0 +1,60 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_welcome {
+  ar:skill_welcome a ar:Skill ;
+    ar:skillDirectory "welcome" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/nanoclaw/container/skills/welcome/SKILL.md" ;
+    ar:sourceSha256 "be4607f88593ccf612aee346c5866e48a89d20718cd7c43796104b7a75a1087a" ;
+    ar:requiresOntologyModule "nanoclaw-core", "nanoclaw-runtime", "nanoclaw-messaging", "local-filesystem" ;
+    ar:subjectToControlKind ar:NanoClawDestinationACL, ar:NanoClawMountModeControl ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_welcome_messaging, ar:adapt_welcome_addenda,
+      ar:adapt_welcome_memory ;
+    ar:sourceNote "NanoClaw container skill (container/skills/welcome). Runs when a channel is first wired: greet, reveal capabilities one at a time, explain approvals and access control, and start shaping memory to the user. Describes other capabilities but performs none of them itself." ;
+    ar:declaresOperation ar:op_welcome_greet, ar:op_welcome_read_addendum, ar:op_welcome_record_memory .
+
+  ar:op_welcome_greet a ar:Operation ;
+    ar:invokedThroughKind ar:NanoClawSendMessageTool, ar:NanoClawSendCardTool, ar:NanoClawAskUserQuestionTool ;
+    ar:targetsKind ar:NanoClawProjectedDestination ;
+    ar:requires ar:cond_builtin_messaging_tool_available, ar:cond_destination_projected_and_authorized ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:sourceNote "Greeting, capability tour, and choice prompts (cards and multiple-choice buttons) to the newly wired chat." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Notify ; ar:affectsKind ar:NanoClawOutboundMessage ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawOutboundMessage ] .
+
+  ar:op_welcome_read_addendum a ar:Operation ; ar:invokedThroughKind ar:NanoClawProviderFileTool ;
+    ar:targetsKind ar:NanoClawSharedSkillsDirectory ;
+    ar:requires ar:cond_provider_file_tool_available, ar:cond_shared_skills_exist ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Read a channel addendum such as /app/skills/welcome/addenda/slack.md when the triggering instruction names one, and follow it." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:NanoClawSharedSkillsDirectory ] .
+
+  ar:op_welcome_record_memory a ar:Operation ; ar:invokedThroughKind ar:NanoClawProviderFileTool ;
+    ar:targetsKind ar:NanoClawPersistentMemory, ar:NanoClawInstructionSource ;
+    ar:requires ar:cond_provider_file_tool_available, ar:cond_container_file_writable ;
+    ar:sourceStatus ar:SkillText ;
+    ar:sourceNote "Record who the user is and inferred context as Core Memory lines in memory/index.md; behavioral role instructions go in instructions.prepend.md; save onboarding corrections to memory." ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawPersistentMemory ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:NanoClawPersistentMemory ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Configure ; ar:affectsKind ar:NanoClawInstructionSource ] .
+
+  ar:adapt_welcome_messaging a ar:AdaptationMapping ;
+    ar:sourceAssumption "The agent can send text, cards, and multiple-choice buttons into the chat." ;
+    ar:nanoclawModel "send_message, send_card, and ask_user_question, delivered by the host through the channel adapter." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "Cards and buttons render only on channels whose adapter supports them." ;
+    ar:adaptedOperation ar:op_welcome_greet .
+  ar:adapt_welcome_addenda a ar:AdaptationMapping ;
+    ar:sourceAssumption "Per-channel addenda exist under /app/skills/welcome/addenda/." ;
+    ar:nanoclawModel "Read from the shared read-only skills mount; channel install skills contribute addenda." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "The stock install ships no addenda directory, so nothing is read unless a channel skill added one." ;
+    ar:adaptedOperation ar:op_welcome_read_addendum .
+  ar:adapt_welcome_memory a ar:AdaptationMapping ;
+    ar:sourceAssumption "Memory persists across conversations." ;
+    ar:nanoclawModel "memory/ and instructions.prepend.md in the read-write group workspace on the host." ;
+    ar:adaptationDisposition ar:NativeAdaptation ;
+    ar:semanticDifference "Inferences about the user are stored without asking and shared by every session of the agent group, including other chats wired to it." ;
+    ar:adaptedOperation ar:op_welcome_record_memory .
+}

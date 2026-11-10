@@ -1,0 +1,150 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ar:OperationShape a sh:NodeShape ;
+  sh:targetClass ar:Operation ;
+  sh:property [ sh:path ar:invokedThroughKind ; sh:class ar:InvocationSurfaceKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:hasPotentialEffect ; sh:class ar:PotentialEffect ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:sourceStatus ; sh:class ar:EvidenceStatus ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:adaptationStatus ; sh:class ar:EvidenceStatus ] .
+
+ar:NativeCapabilityShape a sh:NodeShape ;
+  sh:targetClass ar:NativeCapability ;
+  sh:property [ sh:path ar:nativeEndpointKind ; sh:class ar:InvocationSurfaceKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:nativeResourceKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:nativeEffectType ; sh:class ar:EffectType ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:nativeScopeKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:nativeRequires ; sh:class ar:Requirement ] ;
+  sh:property [ sh:path ar:sourceNote ; sh:datatype xsd:string ; sh:minCount 1 ] .
+
+ar:EffectShape a sh:NodeShape ;
+  sh:targetClass ar:PotentialEffect ;
+  sh:property [ sh:path ar:effectType ; sh:class ar:EffectType ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:affectsKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ] .
+
+ar:PotentialInternetCallShape a sh:NodeShape ;
+  sh:targetClass ar:PotentialInternetCall ;
+  sh:property [ sh:path [ sh:inversePath ar:mayInitiateInternetCall ] ; sh:class ar:Operation ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:callInitiatorKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:callViaKind ; sh:class ar:InvocationSurfaceKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:callEndpointKind ; sh:class ar:PublicInternetEndpointKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:callStage ; sh:class ar:InternetCallStage ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:callConditionalOn ; sh:class ar:Requirement ] ;
+  sh:property [ sh:path ar:callEndpointPattern ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceStatus ; sh:class ar:EvidenceStatus ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:sourceNote ; sh:datatype xsd:string ; sh:minCount 1 ] .
+
+ar:SkillShape a sh:NodeShape ;
+  sh:targetClass ar:Skill ;
+  sh:property [ sh:path ar:subjectToControlKind ; sh:class ar:SecurityControlKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:skillDirectory ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourcePath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceSha256 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:requiresOntologyModule ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ar:hasAdaptationMapping ; sh:class ar:AdaptationMapping ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:governedByAdaptationPolicy ; sh:class ar:AdaptationPolicy ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:declaresOperation ; sh:class ar:Operation ; sh:minCount 1 ] .
+
+ar:MCPServerShape a sh:NodeShape ;
+  sh:targetClass ar:MCPServer ;
+  sh:property [ sh:path ar:mcpServerId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:mcpEndpointPattern ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:subjectToControlKind ; sh:class ar:SecurityControlKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:sourcePath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceSha256 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:requiresOntologyModule ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ar:declaresOperation ; sh:class ar:Operation ; sh:minCount 1 ] .
+
+ar:MCPOperationShape a sh:NodeShape ;
+  sh:targetObjectsOf ar:declaresOperation ;
+  sh:property [ sh:path ar:mcpToolName ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+ar:NanoClawMountPermissionShape a sh:NodeShape ;
+  sh:targetSubjectsOf ar:mountExposesKind ;
+  sh:class ar:WorldSurfaceKind ;
+  sh:property [ sh:path ar:mountPrincipalKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:mountExposesKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:mountAccessMode ; sh:class ar:MountAccessMode ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:mountConditionalOn ; sh:class ar:Requirement ] ;
+  sh:property [ sh:path ar:bindsFromKind ; sh:class ar:WorldSurfaceKind ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:containerPath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:sparql [
+    sh:message "A read-only mount kind must have read-only mode; a read-write mount kind must have read-write mode." ;
+    sh:select """PREFIX ar: <urn:agent-risk:>
+      SELECT $this WHERE {
+        { $this ar:specializesKind+ ar:NanoClawReadOnlyMount .
+          FILTER NOT EXISTS { $this ar:mountAccessMode ar:ReadOnlyMountMode } }
+        UNION
+        { $this ar:specializesKind+ ar:NanoClawReadWriteMount .
+          FILTER NOT EXISTS { $this ar:mountAccessMode ar:ReadWriteMountMode } }
+      }"""
+  ] .
+
+
+ar:OntologyModuleShape a sh:NodeShape ;
+  sh:targetClass ar:OntologyModule ;
+  sh:property [ sh:path ar:ontologyModuleId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:requiresOntologyModule ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path ar:resourcesOnly ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceRepositoryPath ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceRevision ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+ar:AdaptationMappingShape a sh:NodeShape ;
+  sh:targetClass ar:AdaptationMapping ;
+  sh:property [ sh:path [ sh:inversePath ar:hasAdaptationMapping ] ; sh:class ar:Skill ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:sourceAssumption ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:nanoclawModel ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:adaptationDisposition ; sh:class ar:AdaptationDisposition ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:semanticDifference ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:adaptedOperation ; sh:class ar:Operation ] .
+
+# Every necessary-and-sufficient OWL definition must also have a closed-world
+# validation shape. OWL infers positive membership; SHACL catches incomplete
+# evidence on resources that are asserted or inferred to be members.
+ar:EquivalentKindDefinitionShape a sh:NodeShape ;
+  sh:targetSubjectsOf owl:equivalentClass ;
+  sh:or (
+    [ sh:class ar:WorldSurfaceKind ]
+    [ sh:class ar:InvocationSurfaceKind ]
+  ) .
+
+ar:GitMetadataEntryCandidateShape a sh:NodeShape ;
+  sh:targetClass ar:GitMetadataEntryCandidate ;
+  sh:property [
+    sh:path ar:entryName ;
+    sh:hasValue ".git" ;
+    sh:minCount 1
+  ] .
+
+ar:ConventionalGitWorkingTreeCandidateShape a sh:NodeShape ;
+  sh:targetClass ar:ConventionalGitWorkingTreeCandidate ;
+  sh:property [
+    sh:path ar:containsEntry ;
+    sh:qualifiedValueShape [
+      sh:class ar:FileSystemEntry ;
+      sh:property [ sh:path ar:entryName ; sh:hasValue ".git" ; sh:minCount 1 ]
+    ] ;
+    sh:qualifiedMinCount 1
+  ] .
+
+ar:ConventionalGitWorkingTreeShape a sh:NodeShape ;
+  sh:targetClass ar:ConventionalGitWorkingTree ;
+  sh:node ar:ConventionalGitWorkingTreeCandidateShape ;
+  sh:property [
+    sh:path ar:gitRepositoryValidated ;
+    sh:hasValue true ;
+    sh:minCount 1 ;
+    sh:maxCount 1
+  ] .
+
+ar:SideShape a sh:NodeShape ;
+  sh:targetSubjectsOf ar:locatedOn, ar:executesOn ;
+  sh:property [ sh:path ar:locatedOn ; sh:class ar:SystemComponentKind ; sh:maxCount 1 ] ;
+  sh:property [ sh:path ar:executesOn ; sh:class ar:SystemComponentKind ; sh:maxCount 1 ] .
+
+ar:HostBindSourceShape a sh:NodeShape ;
+  sh:targetObjectsOf ar:bindsFromKind ;
+  sh:property [ sh:path ar:locatedOn ; sh:hasValue ar:NanoClawHostProcess ; sh:minCount 1 ] ;
+  sh:property [ sh:path ar:hostPathPattern ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .

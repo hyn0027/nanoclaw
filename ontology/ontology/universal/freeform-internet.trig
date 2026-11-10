@@ -1,0 +1,44 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_freeform_internet {
+  ar:FreeformInternetModule a ar:OntologyModule ;
+    ar:ontologyModuleId "freeform-internet" ;
+    ar:resourcesOnly true .
+
+  ar:Internet a ar:WorldSurfaceKind ;
+    rdfs:comment "Abstract network resource kind; this graph does not assert egress, reachability, provider behavior, or authentication." .
+  ar:InternetHost a ar:WorldSurfaceKind .
+  ar:RemoteNetworkEndpoint a ar:WorldSurfaceKind ;
+    rdfs:comment "A protocol-level network destination, not necessarily an HTTP URL." .
+  ar:PublicInternetEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:RemoteNetworkEndpoint ;
+    rdfs:comment "A destination publicly addressable over the Internet; this classification does not assert the current IP, successful routing, or authorization." .
+  ar:UnspecifiedPublicInternetEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint ;
+    rdfs:comment "Internet destination is plausible but its API host, URL, or protocol endpoint is not established by the skill or inspected adapter." .
+  ar:RemoteService a ar:WorldSurfaceKind .
+  ar:RemoteWebResource a ar:WorldSurfaceKind ;
+    rdfs:comment "A page, file, object, or other remotely addressable web resource." .
+  ar:RemoteServerLog a ar:WorldSurfaceKind ;
+    rdfs:comment "A possible server-side request record, not guaranteed to exist." .
+  ar:RemoteWebsiteAccount a ar:WorldSurfaceKind ;
+    rdfs:comment "An account on an unspecified website, distinct from a named connector or API account." .
+  ar:RemoteServiceAuthorizationControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Remote service's own account, token, role, or endpoint authorization. Local egress or gateway approval does not imply remote authorization." .
+  ar:RemoteWebsiteAccount ar:protectedByKind ar:RemoteServiceAuthorizationControl .
+
+  ar:ExternalNetwork a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Everything beyond the local machine: public Internet hosts and services, messaging platforms, and remote MCP services. Neither the agent container nor the local host; effects located here happen at a remote party." .
+  ar:Internet ar:locatedOn ar:ExternalNetwork .
+  ar:InternetHost ar:locatedOn ar:ExternalNetwork .
+  ar:RemoteNetworkEndpoint ar:locatedOn ar:ExternalNetwork .
+  ar:RemoteService ar:locatedOn ar:ExternalNetwork .
+  ar:RemoteWebResource ar:locatedOn ar:ExternalNetwork .
+  ar:RemoteServerLog ar:locatedOn ar:ExternalNetwork .
+  ar:RemoteWebsiteAccount ar:locatedOn ar:ExternalNetwork .
+
+  ar:Internet ar:containsKind ar:InternetHost .
+  ar:InternetHost ar:containsKind ar:RemoteNetworkEndpoint, ar:RemoteService,
+    ar:RemoteWebResource, ar:RemoteServerLog, ar:RemoteWebsiteAccount .
+}

@@ -35,6 +35,8 @@ import { isValidTimezone } from '../../timezone.js';
 import type { AgentGroup, ContainerConfigRow } from '../../types.js';
 import { registerResource } from '../crud.js';
 import { localizeIsoTimestamps } from '../format.js';
+import { mergePackages, removePackage, validatePackages } from '../../modules/self-mod/packages.js';
+import { describeInstalled } from '../../modules/self-mod/package-lock.js';
 
 /**
  * Parse a --timezone flag: undefined = not passed, null = explicit clear
@@ -322,6 +324,7 @@ registerResource({
       handler: async (args, ctx) => {
         const id = (args.id as string) || (ctx.caller === 'agent' ? ctx.agentGroupId : undefined);
         if (!id) throw new Error('--id is required');
+        let installed = '';
         if (args.rebuild) {
           // Refuse the WHOLE command in the payload (this command exits 0 even
           // on a nonexistent group id) and restart nothing: the operator asked
@@ -336,7 +339,8 @@ registerResource({
                 '--rebuild cannot run here — image changes must be built and imported out of band',
             };
           }
-          await buildAgentGroupImage(id);
+          const record = await buildAgentGroupImage(id);
+          installed = record ? describeInstalled(record) : '';
         }
         const message = args.message as string | undefined;
 
@@ -366,12 +370,12 @@ registerResource({
                 }
               : undefined,
           );
-          return { restarted: 1, rebuilt: !!args.rebuild };
+          return { restarted: 1, rebuilt: !!args.rebuild, ...(installed ? { installed } : {}) };
         }
 
         // From the host: restart all running containers in the group
         const count = await restartAgentGroupContainers(id, 'restarted via ncl', message);
-        return { restarted: count, rebuilt: !!args.rebuild };
+        return { restarted: count, rebuilt: !!args.rebuild, ...(installed ? { installed } : {}) };
       },
     },
     'config get': {
@@ -516,7 +520,7 @@ registerResource({
     'config add-package': {
       access: 'approval',
       description:
-        'Add a package to a group. Requires `ncl groups restart --rebuild` to take effect. Use --id <group-id> and --apt <pkg> or --npm <pkg>.',
+        "Add a package to a group. Requires `ncl groups restart --rebuild` to take effect. Use --id <group-id> and --apt <pkg> or --npm <pkg>; pin an exact version with --npm <pkg>@1.2.3 or --apt <pkg>=<version> (a new spec replaces the package's earlier entry).",
       handler: async (args) => {
         const id = args.id as string;
         if (!id) throw new Error('--id is required');
@@ -528,19 +532,22 @@ registerResource({
         const npm = args.npm as string | undefined;
         if (!apt && !npm) throw new Error('Provide --apt <pkg> or --npm <pkg>');
 
+        const problem = validatePackages(apt ? [apt] : [], npm ? [npm] : []);
+        if (problem) throw new Error(problem);
+
         if (apt) {
-          const existing = JSON.parse(row.packages_apt) as string[];
-          if (!existing.includes(apt)) {
-            existing.push(apt);
-            await updateContainerConfigJson(id, 'packages_apt', existing);
-          }
+          await updateContainerConfigJson(
+            id,
+            'packages_apt',
+            mergePackages('apt', JSON.parse(row.packages_apt) as string[], [apt]),
+          );
         }
         if (npm) {
-          const existing = JSON.parse(row.packages_npm) as string[];
-          if (!existing.includes(npm)) {
-            existing.push(npm);
-            await updateContainerConfigJson(id, 'packages_npm', existing);
-          }
+          await updateContainerConfigJson(
+            id,
+            'packages_npm',
+            mergePackages('npm', JSON.parse(row.packages_npm) as string[], [npm]),
+          );
         }
 
         return {
@@ -565,14 +572,18 @@ registerResource({
         if (!apt && !npm) throw new Error('Provide --apt <pkg> or --npm <pkg>');
 
         if (apt) {
-          const existing = JSON.parse(row.packages_apt) as string[];
-          const filtered = existing.filter((p) => p !== apt);
-          await updateContainerConfigJson(id, 'packages_apt', filtered);
+          await updateContainerConfigJson(
+            id,
+            'packages_apt',
+            removePackage('apt', JSON.parse(row.packages_apt) as string[], apt),
+          );
         }
         if (npm) {
-          const existing = JSON.parse(row.packages_npm) as string[];
-          const filtered = existing.filter((p) => p !== npm);
-          await updateContainerConfigJson(id, 'packages_npm', filtered);
+          await updateContainerConfigJson(
+            id,
+            'packages_npm',
+            removePackage('npm', JSON.parse(row.packages_npm) as string[], npm),
+          );
         }
 
         return {

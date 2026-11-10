@@ -1,0 +1,27 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_shell_execution {
+  ar:ShellExecutionModule a ar:OntologyModule ;
+    ar:ontologyModuleId "shell-execution" .
+
+  ar:ShellExecution a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    rdfs:comment "Execution through a shell-capable command channel; actual availability and privileges are runtime facts." .
+  ar:ShellCommandExecution a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:ShellExecution ;
+    rdfs:comment "A command or CLI launched through a shell/exec channel, whether or not the program is itself a shell script." .
+  ar:ShellScriptExecution a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:ShellExecution ;
+    rdfs:comment "Execution of a script written for a shell interpreter; distinct from launching a Python or Node program through a shell." .
+
+  ar:ShellScriptFile a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalFile .
+  ar:ShellWorkingDirectory a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalDirectory .
+  ar:ShellProcess a ar:WorldSurfaceKind .
+  ar:ShellProcessOutput a ar:WorldSurfaceKind .
+  ar:ShellProcessEnvironment a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:ProcessEnvironment .
+  ar:ShellExitStatus a ar:WorldSurfaceKind .
+  ar:ShellProcess ar:containsKind ar:ShellProcessOutput,
+    ar:ShellProcessEnvironment, ar:ShellExitStatus .
+}

@@ -1,0 +1,309 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_claude_tools {
+  ar:ClaudeToolsModule a ar:OntologyModule ;
+    ar:ontologyModuleId "claude-tools" ;
+    ar:requiresOntologyModule "tool-endpoints", "local-filesystem", "freeform-internet",
+      "shell-execution", "nanoclaw-core", "nanoclaw-runtime", "nanoclaw-network" ;
+    rdfs:comment "Claude Agent SDK built-in tools as a NanoClaw agent container exposes them (SDK ^0.3.257). Each tool kind specializes the provider-neutral NanoClaw endpoint it implements and names its exact SDK tool (ar:providerToolName). Whether a tool is enabled is a deployment fact: NanoClaw's TOOL_ALLOWLIST and SDK_DISALLOWED_TOOLS in container/agent-runner/src/providers/claude-config.ts decide it, read at runtime by materialize.py." ;
+    rdfs:seeAlso <https://code.claude.com/docs/en/settings#tools-available-to-claude> .
+
+  # ── Provider-internal state the tools touch ───────────────────────────────
+  ar:ClaudeTodoList a ar:WorldSurfaceKind ;
+    ar:mayBeStoredAsKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "The agent's task checklist kept by the provider under its state directory (group-scoped in NanoClaw)." .
+  ar:ClaudeToolCatalog a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "Schemas of deferred tools the provider can load on demand. Provider-internal; reading it changes nothing outside the session." .
+  ar:ClaudeSkillDefinition a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "A SKILL.md and its bundled files, discovered through the provider's skills directory. Loading one adds its instructions to the agent's context." .
+  ar:ClaudeAgentTeam a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "A provider-managed team of in-session teammate agents with a shared task list. Teammates run in the same container with the same access; a team is not a NanoClaw agent group." .
+  ar:ClaudeScheduledPrompt a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:NanoClawAgentContainer ;
+    rdfs:comment "An in-process scheduled or recurring prompt (cron/wake-up) held by the provider, invisible to NanoClaw's scheduler. NanoClaw disables the tools that create these." .
+  ar:ClaudeTodoList ar:mayResideInKind ar:NanoClawProviderStateDirectory .
+  ar:ClaudeSkillDefinition ar:mayResideInKind ar:NanoClawSharedSkillsDirectory, ar:NanoClawProviderStateDirectory .
+  ar:NanoClawProviderRuntime ar:containsKind ar:ClaudeToolCatalog, ar:ClaudeAgentTeam, ar:ClaudeScheduledPrompt .
+  ar:ClaudeAgentTeam ar:containsKind ar:NanoClawProviderSubagent .
+
+  # ── Tools NanoClaw enables (TOOL_ALLOWLIST) ───────────────────────────────
+  ar:ClaudeBashTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerShellExecution ;
+    ar:providerToolName "Bash" ;
+    rdfs:comment "Runs a shell command in the container, optionally in the background; covers every generic container-shell capability." .
+  ar:ClaudeReadTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "Read" ;
+    rdfs:comment "Reads a file (text, image, PDF, notebook) at a container path." .
+  ar:ClaudeWriteTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "Write" ;
+    rdfs:comment "Creates a file or overwrites one in full." .
+  ar:ClaudeEditTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "Edit" ;
+    rdfs:comment "Replaces exact text in an existing file; cannot create or delete files." .
+  ar:ClaudeGlobTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "Glob" ;
+    rdfs:comment "Lists paths matching a pattern; reveals names and structure, not contents." .
+  ar:ClaudeGrepTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "Grep" ;
+    rdfs:comment "Searches file contents by regular expression and returns matching lines or paths." .
+  ar:ClaudeNotebookEditTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderFileTool ;
+    ar:providerToolName "NotebookEdit" ;
+    rdfs:comment "Inserts, replaces, or deletes cells in a Jupyter notebook file." .
+  ar:ClaudeWebFetchTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderWebFetchTool ;
+    ar:providerToolName "WebFetch" ;
+    rdfs:comment "GETs a URL from the container (after a provider-side domain check) and returns a model-written summary of the page. The agent chooses the whole URL, so data can leave in the path or query string; requests to hosts with stored gateway secrets are authenticated." .
+  ar:ClaudeWebSearchTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderWebSearchTool ;
+    ar:providerToolName "WebSearch" ;
+    rdfs:comment "Provider-side web search: the agent supplies only a query (and optional domain filters); no method, body, headers, or credentials, so it cannot change remote state. The query itself leaves inside the model request." .
+  ar:ClaudeTaskTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderSubagentTool ;
+    ar:providerToolName "Task" ;
+    rdfs:comment "Starts a subagent in the same container with the same tools and access." .
+  ar:ClaudeTaskOutputTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ProcessControlTool ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "TaskOutput" ;
+    rdfs:comment "Reads the output of a background task (a background shell command or subagent)." .
+  ar:ClaudeTaskStopTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ProcessControlTool ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "TaskStop" ;
+    rdfs:comment "Stops a background task." .
+  ar:ClaudeTeamCreateTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:SubagentSpawnTool ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "TeamCreate" ;
+    rdfs:comment "Creates an in-session agent team whose teammates run in the same container." .
+  ar:ClaudeTeamDeleteTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:SubagentSpawnTool ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "TeamDelete" ;
+    rdfs:comment "Removes an in-session agent team." .
+  ar:ClaudeTodoWriteTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "TodoWrite" ;
+    rdfs:comment "Replaces the agent's task checklist." .
+  ar:ClaudeToolSearchTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "ToolSearch" ;
+    rdfs:comment "Looks up and loads schemas of deferred tools; it grants no tool that is not already allowed." .
+  ar:ClaudeSkillTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "Skill" ;
+    rdfs:comment "Loads a skill's instructions into context. Only names and descriptions are visible until a skill is loaded; skills add guidance, not permissions." .
+
+  # ── Tools NanoClaw disables (SDK_DISALLOWED_TOOLS) ────────────────────────
+  # Modeled so a deployment that re-enables one is visible; most bypass NanoClaw
+  # (its own scheduler, messaging, and approvals) or need an interactive UI.
+  ar:ClaudeCronCreateTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "CronCreate" ;
+    rdfs:comment "Schedules a recurring in-process prompt, bypassing NanoClaw's task scheduler." .
+  ar:ClaudeCronDeleteTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "CronDelete" .
+  ar:ClaudeCronListTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "CronList" .
+  ar:ClaudeScheduleWakeupTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "ScheduleWakeup" ;
+    rdfs:comment "Schedules an in-process wake-up, bypassing NanoClaw's scheduler." .
+  ar:ClaudeAskUserQuestionTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "AskUserQuestion" ;
+    rdfs:comment "Interactive question for a local UI; would hang a headless session (NanoClaw's ask_user_question replaces it)." .
+  ar:ClaudeSendMessageTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "SendMessage" ;
+    rdfs:comment "Provider-internal messaging between agents; NanoClaw's send_message replaces it." .
+  ar:ClaudeEnterPlanModeTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "EnterPlanMode" .
+  ar:ClaudeExitPlanModeTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "ExitPlanMode" .
+  ar:ClaudeEnterWorktreeTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "EnterWorktree" ;
+    rdfs:comment "Creates a git worktree and switches the session into it." .
+  ar:ClaudeExitWorktreeTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "ExitWorktree" .
+  ar:ClaudeDesignSyncTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "DesignSync" ;
+    rdfs:comment "Desktop design-tool integration; no effect is modeled for a headless container." .
+  ar:ClaudeReportFindingsTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ; ar:executesOn ar:NanoClawAgentContainer ;
+    ar:providerToolName "ReportFindings" ;
+    rdfs:comment "Code-review reporting UI affordance; no effect is modeled for a headless container." .
+
+  # ── One requirement per tool: that tool is enabled ────────────────────────
+  ar:cond_claude_Bash a ar:Requirement ; ar:requiresProviderTool "Bash" .
+  ar:cond_claude_Read a ar:Requirement ; ar:requiresProviderTool "Read" .
+  ar:cond_claude_Write a ar:Requirement ; ar:requiresProviderTool "Write" .
+  ar:cond_claude_Edit a ar:Requirement ; ar:requiresProviderTool "Edit" .
+  ar:cond_claude_Glob a ar:Requirement ; ar:requiresProviderTool "Glob" .
+  ar:cond_claude_Grep a ar:Requirement ; ar:requiresProviderTool "Grep" .
+  ar:cond_claude_NotebookEdit a ar:Requirement ; ar:requiresProviderTool "NotebookEdit" .
+  ar:cond_claude_WebFetch a ar:Requirement ; ar:requiresProviderTool "WebFetch" .
+  ar:cond_claude_WebSearch a ar:Requirement ; ar:requiresProviderTool "WebSearch" .
+  ar:cond_claude_Task a ar:Requirement ; ar:requiresProviderTool "Task" .
+  ar:cond_claude_TaskOutput a ar:Requirement ; ar:requiresProviderTool "TaskOutput" .
+  ar:cond_claude_TaskStop a ar:Requirement ; ar:requiresProviderTool "TaskStop" .
+  ar:cond_claude_TeamCreate a ar:Requirement ; ar:requiresProviderTool "TeamCreate" .
+  ar:cond_claude_TeamDelete a ar:Requirement ; ar:requiresProviderTool "TeamDelete" .
+  ar:cond_claude_TodoWrite a ar:Requirement ; ar:requiresProviderTool "TodoWrite" .
+  ar:cond_claude_ToolSearch a ar:Requirement ; ar:requiresProviderTool "ToolSearch" .
+  ar:cond_claude_Skill a ar:Requirement ; ar:requiresProviderTool "Skill" .
+  ar:cond_claude_CronCreate a ar:Requirement ; ar:requiresProviderTool "CronCreate" .
+  ar:cond_claude_ScheduleWakeup a ar:Requirement ; ar:requiresProviderTool "ScheduleWakeup" .
+  ar:cond_claude_EnterWorktree a ar:Requirement ; ar:requiresProviderTool "EnterWorktree" .
+
+  # ── File tools: precise effects per tool (refine the generic file-tool capabilities) ──
+  ar:ClaudeReadFile a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileRead ;
+    ar:nativeEndpointKind ar:ClaudeReadTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_Read, ar:cond_container_file_readable ;
+    ar:sourceNote "Read returns a container-visible file's contents to the model." .
+  ar:ClaudeGrepFile a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileRead ;
+    ar:nativeEndpointKind ar:ClaudeGrepTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_Grep, ar:cond_container_file_readable ;
+    ar:sourceNote "Grep returns matching lines of container-visible files." .
+  ar:ClaudeGlobPaths a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileRead ;
+    ar:nativeEndpointKind ar:ClaudeGlobTool ;
+    ar:nativeResourceKind ar:LocalFileMetadata ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_Glob, ar:cond_container_file_readable ;
+    ar:sourceNote "Glob reveals which paths exist (names and structure), not file contents." .
+  ar:ClaudeWriteFile a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileWrite ;
+    ar:nativeEndpointKind ar:ClaudeWriteTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Create, ar:Update ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_Write, ar:cond_container_file_writable ;
+    ar:sourceNote "Write creates a file or replaces its whole content on a writable path." .
+  ar:ClaudeEditFile a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileWrite ;
+    ar:nativeEndpointKind ar:ClaudeEditTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Update ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_Edit, ar:cond_container_file_writable ;
+    ar:sourceNote "Edit changes text in an existing file; it cannot create or delete files." .
+  ar:ClaudeNotebookEditFile a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderFileWrite ;
+    ar:nativeEndpointKind ar:ClaudeNotebookEditTool ;
+    ar:nativeResourceKind ar:LocalFile ; ar:nativeEffectType ar:Update ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_NotebookEdit, ar:cond_container_file_writable ;
+    ar:sourceNote "NotebookEdit changes cells of an existing notebook file." .
+
+  # ── Web tools (refine the generic web capabilities) ───────────────────────
+  ar:ClaudeWebFetchRead a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderWebFetch ;
+    ar:nativeEndpointKind ar:ClaudeWebFetchTool ;
+    ar:nativeResourceKind ar:RemoteWebResource ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_claude_WebFetch, ar:cond_network_route_permitted ;
+    ar:sourceNote "WebFetch GETs a page from the container and returns a model-written summary of it." .
+  ar:ClaudeWebFetchURLTransmit a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderWebFetch ;
+    ar:nativeEndpointKind ar:ClaudeWebFetchTool ;
+    ar:nativeResourceKind ar:RemoteNetworkEndpoint ; ar:nativeEffectType ar:Transmit ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_claude_WebFetch, ar:cond_network_route_permitted ;
+    ar:sourceNote "The agent chooses the whole URL, so whatever it puts in the path or query string reaches that host; a GET with side effects on the remote end is possible." .
+  ar:ClaudeWebSearchRead a ar:NativeCapability ;
+    ar:refinesCapability ar:NativeProviderWebSearch ;
+    ar:nativeEndpointKind ar:ClaudeWebSearchTool ;
+    ar:nativeResourceKind ar:RemoteWebResource ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_claude_WebSearch ;
+    ar:sourceNote "WebSearch returns provider-run search results; the query is the only input, so no remote state is changed." .
+
+  # ── Tools with no generic counterpart ────────────────────────────────────
+  ar:ClaudeTaskOutputRead a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeTaskOutputTool ;
+    ar:nativeResourceKind ar:ShellProcessOutput ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_TaskOutput ;
+    ar:sourceNote "Reads the output of a background shell command or subagent in this container." .
+  ar:ClaudeTaskStopProcess a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeTaskStopTool ;
+    ar:nativeResourceKind ar:NanoClawContainerProcess ; ar:nativeEffectType ar:Delete ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_TaskStop ;
+    ar:sourceNote "Terminates a background task in this container." .
+  ar:ClaudeTeamCreateTeam a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeTeamCreateTool ;
+    ar:nativeResourceKind ar:ClaudeAgentTeam ; ar:nativeEffectType ar:Create, ar:Delegate ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_TeamCreate ;
+    ar:sourceNote "Creates in-session teammates that share the container's access." .
+  ar:ClaudeTeamDeleteTeam a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeTeamDeleteTool ;
+    ar:nativeResourceKind ar:ClaudeAgentTeam ; ar:nativeEffectType ar:Delete ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_TeamDelete ;
+    ar:sourceNote "Removes an in-session agent team." .
+  ar:ClaudeTodoUpdate a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeTodoWriteTool ;
+    ar:nativeResourceKind ar:ClaudeTodoList ; ar:nativeEffectType ar:Update ;
+    ar:nativeScopeKind ar:NanoClawProviderStateDirectory ;
+    ar:nativeRequires ar:cond_claude_TodoWrite ;
+    ar:sourceNote "Replaces the agent's task checklist in the provider state directory." .
+  ar:ClaudeToolCatalogRead a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeToolSearchTool ;
+    ar:nativeResourceKind ar:ClaudeToolCatalog ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawProviderRuntime ;
+    ar:nativeRequires ar:cond_claude_ToolSearch ;
+    ar:sourceNote "Loads schemas of already-allowed deferred tools; no world effect." .
+  ar:ClaudeSkillLoad a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeSkillTool ;
+    ar:nativeResourceKind ar:ClaudeSkillDefinition ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:NanoClawSharedSkillsDirectory ;
+    ar:nativeRequires ar:cond_claude_Skill ;
+    ar:sourceNote "Reads a selected skill's files into the agent's context." .
+  ar:ClaudeCronSchedule a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeCronCreateTool ;
+    ar:nativeResourceKind ar:ClaudeScheduledPrompt ; ar:nativeEffectType ar:Create ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_CronCreate ;
+    ar:sourceNote "Would schedule prompts outside NanoClaw's scheduler; disabled by NanoClaw." .
+  ar:ClaudeWakeupSchedule a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeScheduleWakeupTool ;
+    ar:nativeResourceKind ar:ClaudeScheduledPrompt ; ar:nativeEffectType ar:Create ;
+    ar:nativeScopeKind ar:NanoClawAgentContainer ;
+    ar:nativeRequires ar:cond_claude_ScheduleWakeup ;
+    ar:sourceNote "Would schedule a wake-up outside NanoClaw's scheduler; disabled by NanoClaw." .
+  ar:ClaudeWorktreeCreate a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:ClaudeEnterWorktreeTool ;
+    ar:nativeResourceKind ar:LocalDirectory ; ar:nativeEffectType ar:Create ;
+    ar:nativeScopeKind ar:NanoClawContainerFileSystem ;
+    ar:nativeRequires ar:cond_claude_EnterWorktree, ar:cond_container_file_writable ;
+    ar:sourceNote "Would create a git worktree directory; disabled by NanoClaw." .
+}

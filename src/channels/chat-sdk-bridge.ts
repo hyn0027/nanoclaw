@@ -400,6 +400,25 @@ function resolveSelectedOption(
   return candidate;
 }
 
+/**
+ * Split a Discord component custom_id of an ask_question card button. The Chat SDK's
+ * Discord adapter encodes a button as `<id>\n<value>` (here `ncq:<questionId>:<idx>\n<idx>`);
+ * the value must come off first, or the tail reads `0\n0`, matches no option, and every
+ * click (Approve included) resolves as an unknown answer — which approvals treat as reject.
+ */
+export function parseCardCustomId(customId: string | undefined): {
+  questionId?: string;
+  tail?: string;
+  buttonValue?: string;
+} {
+  const [actionId, ...valueParts] = (customId ?? '').split('\n');
+  const buttonValue = valueParts.length ? valueParts.join('\n') : undefined;
+  if (!actionId.startsWith('ncq:')) return {};
+  const colonIdx = actionId.indexOf(':', 4); // after "ncq:"
+  if (colonIdx === -1) return {};
+  return { questionId: actionId.slice(4, colonIdx), tail: actionId.slice(colonIdx + 1), buttonValue };
+}
+
 interface TerminalApprovalCard {
   title: string;
   question: string;
@@ -1077,16 +1096,7 @@ async function handleForwardedEvent(
       const interactionId = interaction.id as string;
       const interactionToken = interaction.token as string;
 
-      // Parse the selected option from custom_id
-      let questionId: string | undefined;
-      let tail: string | undefined;
-      if (customId?.startsWith('ncq:')) {
-        const colonIdx = customId.indexOf(':', 4); // after "ncq:"
-        if (colonIdx !== -1) {
-          questionId = customId.slice(4, colonIdx);
-          tail = customId.slice(colonIdx + 1);
-        }
-      }
+      const { questionId, tail, buttonValue } = parseCardCustomId(customId);
 
       // Update the card to show the selected answer and remove buttons
       const originalEmbeds =
@@ -1095,7 +1105,7 @@ async function handleForwardedEvent(
       const render = questionId ? await resolveQuestionRender(questionId) : undefined;
       // Discord custom_id mirrors the new index-based encoding (see Button
       // construction). Decode back to the real option value for downstream.
-      const selectedOption = resolveSelectedOption(render, tail, tail);
+      const selectedOption = resolveSelectedOption(render, buttonValue ?? tail, tail);
       const cardTitle = render?.title ?? ((originalEmbeds[0]?.title as string) || '❓ Question');
       const matchedOpt = render?.options.find((o) => o.value === selectedOption);
       const selectedLabel = matchedOpt?.selectedLabel ?? selectedOption ?? customId;

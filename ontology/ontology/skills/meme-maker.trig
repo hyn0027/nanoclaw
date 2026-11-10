@@ -1,0 +1,121 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_meme_maker {
+  ar:skill_meme_maker a ar:Skill ;
+    ar:skillDirectory "meme-maker-1.0.0" ;
+    ar:sourcePath "/Users/yhong3/Documents/Research/agent-risk/top_skills/meme-maker-1.0.0/SKILL.md" ;
+    ar:sourceSha256 "05e5500023d6b432f695f680ca771b005ab66b03aceff9294dc0a9768dcf2301" ;
+    ar:requiresOntologyModule "nanoclaw-runtime", "nanoclaw-network" ;
+    ar:subjectToControlKind ar:NanoClawContainerIsolationControl,
+      ar:NanoClawMountModeControl, ar:NanoClawEgressLockdownControl,
+      ar:OneCLIGatewayPolicy, ar:RemoteServiceAuthorizationControl ;
+    ar:governedByAdaptationPolicy ar:NanoClawSkillAdaptationPolicy ;
+    ar:hasAdaptationMapping ar:adapt_meme_local_runtime,
+      ar:adapt_meme_network ;
+    ar:sourceNote "NanoClaw adaptation: the Node program runs in the session container, writes container-visible workspace files, and reaches Imgflip through the configured egress path." ;
+    ar:declaresOperation ar:op_meme_catalog, ar:op_meme_local_render,
+      ar:op_meme_hosted_render, ar:op_meme_refresh .
+
+  ar:MemeScript a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerShellExecution ;
+    ar:routesToKind ar:NanoClawContainerFileSystem, ar:ImgflipAPI ;
+    rdfs:comment "Node program launched by command; not a script for a shell interpreter." .
+  ar:ImgflipAPI a ar:InvocationSurfaceKind ;
+    ar:routesToKind ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest, ar:ImgflipService .
+  ar:CuratedTemplateRegistry a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalFile .
+  ar:TemplateImage a ar:WorldSurfaceKind ; ar:specializesKind ar:RemoteWebResource .
+  ar:TemplateCache a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalDirectory .
+  ar:LocalMemeFile a ar:WorldSurfaceKind ; ar:specializesKind ar:LocalFile .
+  ar:CuratedTemplateRegistry ar:mayResideInKind ar:NanoClawSharedSkillsDirectory .
+  ar:TemplateCache ar:mayResideInKind ar:NanoClawSessionWorkspace .
+  ar:LocalMemeFile ar:mayResideInKind ar:NanoClawSessionWorkspace .
+  ar:op_meme_catalog ar:requires ar:cond_container_file_readable .
+  ar:op_meme_local_render ar:requires ar:cond_container_file_writable .
+  ar:ImgflipService a ar:WorldSurfaceKind .
+  ar:ImgflipService ar:protectedByKind ar:RemoteServiceAuthorizationControl .
+  ar:ImgflipAPIEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint .
+  ar:ImgflipTemplateImageEndpoint a ar:WorldSurfaceKind, ar:PublicInternetEndpointKind ;
+    ar:specializesKind ar:PublicInternetEndpoint ;
+    rdfs:comment "Remote image URL from the inspected bundled template metadata, which currently uses i.imgflip.com." .
+  ar:HostedMeme a ar:WorldSurfaceKind .
+  ar:ImgflipCredential a ar:WorldSurfaceKind .
+  ar:MemeCaptionText a ar:WorldSurfaceKind .
+  ar:LocalFileSystem ar:containsKind ar:CuratedTemplateRegistry, ar:TemplateCache, ar:LocalMemeFile .
+  ar:NanoClawSharedSkillsDirectory ar:containsKind ar:CuratedTemplateRegistry .
+  ar:NanoClawSessionWorkspace ar:containsKind ar:TemplateCache, ar:LocalMemeFile .
+  ar:ImgflipService ar:containsKind ar:HostedMeme, ar:TemplateImage .
+
+  ar:cond_node_installed a ar:Requirement .
+  ar:cond_template_download a ar:Requirement .
+  ar:cond_template_cache_miss a ar:Requirement .
+  ar:cond_sharp_for_png a ar:Requirement .
+  ar:cond_imgflip_credentials a ar:Requirement .
+  ar:cond_imgflip_network a ar:Requirement .
+
+  ar:op_meme_catalog a ar:Operation ; ar:invokedThroughKind ar:MemeScript ;
+    ar:targetsKind ar:CuratedTemplateRegistry ; ar:requires ar:cond_node_installed ;
+    ar:sourceNote "list/search/suggest inspect local template metadata; no media publication is implied." ;
+    ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:CuratedTemplateRegistry ] .
+
+  ar:op_meme_local_render a ar:Operation ; ar:invokedThroughKind ar:MemeScript ;
+    ar:mayInitiateInternetCall ar:call_meme_template_image ;
+    ar:targetsKind ar:TemplateImage, ar:TemplateCache, ar:LocalMemeFile ;
+    ar:requires ar:cond_node_installed, ar:cond_template_download ;
+    ar:sourceNote "Inspected script downloads a template image, caches it, and writes SVG or PNG; PNG additionally needs sharp." ;
+    ar:sourceStatus ar:ScriptInspected ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:TemplateImage ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:TemplateCache ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:LocalMemeFile ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:LocalMemeFile ] .
+
+  ar:op_meme_hosted_render a ar:Operation ; ar:invokedThroughKind ar:MemeScript, ar:ImgflipAPI ;
+    ar:mayInitiateInternetCall ar:call_meme_caption ;
+    ar:targetsKind ar:ImgflipService, ar:HostedMeme ;
+    ar:requires ar:cond_node_installed, ar:cond_imgflip_credentials, ar:cond_imgflip_network ;
+    ar:sourceNote "Inspected script posts caption text and credentials to Imgflip caption_image and returns a hosted URL. Public discoverability is not asserted." ;
+    ar:sourceStatus ar:ScriptInspected ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Transmit ; ar:affectsKind ar:ImgflipService ],
+      [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:HostedMeme ] .
+
+  ar:op_meme_refresh a ar:Operation ; ar:invokedThroughKind ar:MemeScript, ar:ImgflipAPI ;
+    ar:mayInitiateInternetCall ar:call_meme_refresh ;
+    ar:targetsKind ar:ImgflipService ; ar:requires ar:cond_node_installed, ar:cond_imgflip_network ;
+    ar:sourceNote "Fetches current top-template metadata; the skill says not to overwrite the curated registry automatically." ;
+    ar:sourceStatus ar:ScriptInspected ; ar:adaptationStatus ar:InferredForNanoClaw ;
+    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Read ; ar:affectsKind ar:ImgflipService ] .
+
+  ar:call_meme_template_image a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ; ar:callViaKind ar:MemeScript, ar:NanoClawContainerNetworkRequest ;
+    ar:callEndpointKind ar:ImgflipTemplateImageEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callConditionalOn ar:cond_template_cache_miss ;
+    ar:callEndpointPattern "https://i.imgflip.com/{template-image}" ;
+    ar:sourceStatus ar:ScriptInspected ; ar:sourceNote "The script fetches template.imageUrl only on a cache miss. Inspected bundled metadata currently uses i.imgflip.com; the concrete image path varies by template." .
+  ar:call_meme_caption a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ; ar:callViaKind ar:MemeScript, ar:NanoClawContainerNetworkRequest ;
+    ar:callEndpointKind ar:ImgflipAPIEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://api.imgflip.com/caption_image" ;
+    ar:sourceStatus ar:ScriptInspected ; ar:sourceNote "The bundled script POSTs caption text and Imgflip credentials to this URL." .
+  ar:call_meme_refresh a ar:PotentialInternetCall ;
+    ar:callInitiatorKind ar:NanoClawAgentContainer ; ar:callViaKind ar:MemeScript, ar:NanoClawContainerNetworkRequest ;
+    ar:callEndpointKind ar:ImgflipAPIEndpoint ; ar:callStage ar:ContainerEgress ;
+    ar:callEndpointPattern "https://api.imgflip.com/get_memes" ;
+    ar:sourceStatus ar:ScriptInspected ; ar:sourceNote "The bundled script fetches template metadata from this URL." .
+
+  ar:adapt_meme_local_runtime a ar:AdaptationMapping ;
+    ar:sourceAssumption "Node script reads bundled templates and writes cache/output locally." ;
+    ar:nanoclawModel "Script runs through container shell; the bundled registry is under the read-only shared skill mount, while cache and output are in session workspace." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "Execution depends on Node and optional sharp; output persistence depends on the selected workspace path." ;
+    ar:adaptedOperation ar:op_meme_catalog, ar:op_meme_local_render .
+
+  ar:adapt_meme_network a ar:AdaptationMapping ;
+    ar:sourceAssumption "Script downloads templates or calls Imgflip." ;
+    ar:nanoclawModel "Proxy-aware or direct container request to Imgflip." ;
+    ar:adaptationDisposition ar:ConditionalAdaptation ;
+    ar:semanticDifference "Execution depends on effective OneCLI/egress policy and credentials. The ontology records both network alternatives, not which one is live." ;
+    ar:adaptedOperation ar:op_meme_local_render,
+      ar:op_meme_hosted_render, ar:op_meme_refresh .
+}

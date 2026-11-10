@@ -20,6 +20,17 @@ the approval handler itself — there is no separate "request rebuild" step.
   - `add_mcp_server` → update `container.json` and kill the container.
     No image rebuild — bun runs TS directly, so the new MCP wiring is
     picked up on the next container start.
+- Package specs (`packages.ts`): a name, or a name pinned to one exact
+  version (`pkg@1.2.3`, `pkg=<debian version>`); validated at every entry
+  point (`install_packages`, `ncl groups config add-package`) and again
+  before the Dockerfile is written. A new spec replaces the package's
+  earlier entry.
+- Installed versions (`package-lock.ts`): after every per-group build the
+  host runs the new image once, with no network, and records what was
+  actually installed (dpkg for apt; each package's package.json for npm)
+  in `data/package-locks/<agent-group-id>.json` — current build plus the
+  last 20 as history. The approval note to the agent and
+  `ncl groups restart --rebuild` report the versions.
 
 ## Dependency
 

@@ -32,8 +32,11 @@ function err(text: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${text}` }], isError: true };
 }
 
-const APT_RE = /^[a-z0-9][a-z0-9._+-]*$/;
-const NPM_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+// A name, or a name pinned to one exact version. Mirrors the host's src/modules/self-mod/packages.ts
+// (the host re-validates); keep the two in sync.
+const APT_RE = /^[a-z0-9][a-z0-9._+-]*(=[0-9][A-Za-z0-9.+~:-]*)?$/;
+const NPM_RE =
+  /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$/;
 const MAX_PACKAGES = 20;
 
 export const installPackages: McpToolDefinition = {
@@ -47,12 +50,12 @@ export const installPackages: McpToolDefinition = {
         apt: {
           type: 'array',
           items: { type: 'string' },
-          description: 'apt packages to install (names only, no version specs or flags)',
+          description: 'apt packages to install: a name, or name=<exact version> to pin (no ranges or flags)',
         },
         npm: {
           type: 'array',
           items: { type: 'string' },
-          description: 'npm packages to install globally (names only, no version specs)',
+          description: 'npm packages to install globally: a name, or name@<exact version> to pin, e.g. @scope/pkg@1.2.3 (no ranges, tags or URLs). Pin MCP servers and anything security-relevant.',
         },
         reason: { type: 'string', description: 'Why these packages are needed' },
       },
@@ -66,9 +69,9 @@ export const installPackages: McpToolDefinition = {
 
     const invalidApt = apt.find((p) => !APT_RE.test(p));
     if (invalidApt)
-      return err(`Invalid apt package name: "${invalidApt}". Only lowercase letters, digits, and ._+- allowed.`);
+      return err(`Invalid apt package: "${invalidApt}". Use a name or name=<exact version> (lowercase letters, digits, ._+-).`);
     const invalidNpm = npm.find((p) => !NPM_RE.test(p));
-    if (invalidNpm) return err(`Invalid npm package name: "${invalidNpm}". No version specs or shell characters.`);
+    if (invalidNpm) return err(`Invalid npm package: "${invalidNpm}". Use a name or name@<exact version> like @scope/pkg@1.2.3 (no ranges, tags, URLs or shell characters).`);
 
     const requestId = generateId();
     await writeMessageOut({

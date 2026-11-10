@@ -1,0 +1,158 @@
+@prefix ar: <urn:agent-risk:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ar:g_nanoclaw_network {
+  ar:OneCLIGateway a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "External gateway service that supplies container proxy/CA configuration and can inspect, authorize, inject credentials into, and forward requests it receives." .
+  ar:OneCLICredentialVault a ar:WorldSurfaceKind, ar:SystemComponentKind .
+  ar:OneCLIAgentIdentity a ar:WorldSurfaceKind ;
+    rdfs:comment "Stable OneCLI identity keyed by NanoClaw agent-group id, ensured at every container spawn. All sessions and in-container subagents of one agent group share it, so gateway credentials and policy cannot distinguish them." .
+  ar:OneCLICredentialStub a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Read-only credential stub contributed to a container; distinct from the real external-service credential." .
+  ar:OneCLICACertificate a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    rdfs:comment "Gateway CA mounted read-only at a gateway-supplied path, plus (when the host has a system CA bundle) a combined bundle that SSL_CERT_FILE and DENO_CERT point to, so compatible clients trust the gateway's HTTPS interception." .
+  ar:OneCLIFileMount a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawReadOnlyMount ;
+    ar:mountPrincipalKind ar:NanoClawAgentContainer ;
+    ar:mountExposesKind ar:OneCLICredentialStub, ar:OneCLICACertificate ;
+    ar:mountAccessMode ar:ReadOnlyMountMode ;
+    ar:mountConditionalOn ar:cond_onecli_files_contributed ;
+    ar:containerPath "/tmp/onecli-*" ;
+    ar:bindsFromKind ar:OneCLIHostStagedFile ;
+    rdfs:comment "OneCLI-contributed read-only mounts: the CA always when the gateway is active, the combined bundle and credential stubs conditionally. A credential stub is not the underlying secret; real credentials are injected into requests at the gateway, and the spawn admission check rejects credential-looking values in contributed environment variables." .
+  ar:cond_onecli_files_contributed a ar:Requirement ;
+    rdfs:comment "The configured OneCLI gateway contributes CA and/or credential-stub files for this session." .
+  ar:OneCLIGatewayPolicy a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Gateway-side authorization, credential grant, approval, or rate-limit policy, keyed by the OneCLI agent identity (one per agent group) rather than by session. Available semantics depend on the installed OneCLI version." .
+  ar:OneCLIPolicyRule a ar:WorldSurfaceKind ;
+    ar:locatedOn ar:OneCLIGateway ;
+    rdfs:comment "One gateway policy entry. In stock OneCLI this is a rule (block, allow, rate limit, require approval) on a host pattern and optionally a path, method, or body condition, and deny-by-default only covers credentialed requests to non-LLM hosts. In the local OneCLI 2.14 Cedar build it is one Cedar statement (permit or forbid, optionally @approval or @rate_limit) over the agent, the HTTP method as the action, the host as the resource, and request context (path, query, headers, body); the gateway denies every request no enabled permit matches, so with egress lockdown the permits form the egress allowlist, and OneCLI's own rules only grant credentials." .
+  ar:OneCLIGatewayPolicy ar:containsKind ar:OneCLIPolicyRule .
+  ar:NanoClawEgressLockdownControl a ar:WorldSurfaceKind, ar:SecurityControlKind ;
+    rdfs:comment "Optional control (NANOCLAW_EGRESS_LOCKDOWN, off by default) that places agent containers on a Docker internal network whose only other member is the OneCLI gateway, aliased as host.docker.internal. Direct egress and other host services become unreachable; it fails closed (no spawn) if the network or gateway attachment cannot be established." .
+  ar:NanoClawHostReachableService a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteNetworkEndpoint ;
+    rdfs:comment "Service listening on the Docker host or bridge (for example the gateway's web interface or a channel webhook server) that a container can reach through host.docker.internal or the bridge gateway when egress lockdown is off." .
+  ar:NanoClawInternalEgressNetwork a ar:WorldSurfaceKind, ar:SystemComponentKind ;
+    rdfs:comment "Docker --internal network used when egress lockdown is enabled." .
+  ar:LocalMCPServerProcess a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:NanoClawContainerProcess .
+  ar:RemoteMCPService a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:RemoteService ;
+    rdfs:comment "Remote MCP service. Its own downstream API calls occur outside the local NanoClaw container and local lockdown boundary." .
+
+  ar:OneCLIGateway ar:containsKind ar:OneCLICredentialVault,
+    ar:OneCLIAgentIdentity, ar:OneCLIGatewayPolicy .
+  ar:NanoClawAgentContainer ar:containsKind ar:OneCLICredentialStub,
+    ar:OneCLICACertificate .
+  ar:OneCLICredentialStub ar:protectedByKind ar:NanoClawMountModeControl .
+  ar:OneCLICACertificate ar:protectedByKind ar:NanoClawMountModeControl .
+
+  ar:NanoClawContainerNetworkRequest a ar:InvocationSurfaceKind ;
+    rdfs:comment "Network connection initiated by code in the agent container." .
+  ar:NanoClawProxyAwareHTTPRequest a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerNetworkRequest ;
+    ar:routesToKind ar:OneCLIProxyInvocation ;
+    rdfs:comment "Request from a client that honors the gateway-supplied proxy environment variables; only such requests reach the gateway." .
+  ar:NanoClawDirectNetworkRequest a ar:InvocationSurfaceKind ;
+    ar:specializesInvocationKind ar:NanoClawContainerNetworkRequest ;
+    ar:routesToKind ar:RemoteNetworkEndpoint, ar:NanoClawHostReachableService ;
+    ar:protectedByKind ar:NanoClawEgressLockdownControl ;
+    rdfs:comment "Possible direct path when the client ignores proxy configuration and lockdown is not effectively enabled. With effective lockdown, this path is blocked rather than transparently redirected." .
+  ar:OneCLIProxyInvocation a ar:InvocationSurfaceKind ;
+    ar:routesToKind ar:OneCLIGatewayInvocation .
+  ar:OneCLIGatewayInvocation a ar:InvocationSurfaceKind ;
+    ar:routesToKind ar:RemoteNetworkEndpoint ;
+    ar:protectedByKind ar:OneCLIGatewayPolicy ;
+    rdfs:comment "Gateway processing can see decrypted HTTP method, URL, headers, body, and response for intercepted HTTPS traffic; visibility does not imply complete logging." .
+
+  ar:NanoClawProviderWebTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:ToolEndpoint ;
+    ar:protectedByKind ar:NanoClawProviderToolPolicyControl ;
+    rdfs:comment "Provider web surface; the fetch and search tools below run in different places." .
+  ar:NanoClawProviderWebFetchTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderWebTool ;
+    ar:routesToKind ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "Provider URL-fetch tool (Claude: WebFetch). The page is fetched from inside the container, so the gateway or direct route applies; the agent receives a model-generated summary of the page rather than its raw content." .
+  ar:NanoClawProviderWebSearchTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:NanoClawProviderWebTool ;
+    rdfs:comment "Provider search tool (Claude: WebSearch) executed by the model provider's own service. The query leaves the container inside the model-provider request (which does pass the gateway), but the search and any site contacts happen at the provider, so local egress controls cannot see or restrict which searches run or which sites are reached. Removing the tool from the provider's allowlist is the local control." .
+
+  ar:cond_provider_web_tool_available a ar:Requirement ;
+    ar:satisfiedByEndpointKind ar:NanoClawProviderWebTool ;
+    rdfs:comment "The selected provider exposes a web search/fetch tool to this session." .
+  ar:cond_network_route_permitted a ar:Requirement ;
+    rdfs:comment "A concrete outbound route, destination, and applicable gateway or direct-egress policy permit the request; remote authorization is separate." .
+  ar:cond_network_client_available a ar:Requirement ;
+    rdfs:comment "A chosen shell command or installed client can issue the intended network request." .
+  ar:NativeProviderWebFetch a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawProviderWebFetchTool ;
+    ar:nativeResourceKind ar:RemoteWebResource ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_provider_web_tool_available,
+      ar:cond_network_route_permitted ;
+    ar:sourceNote "A provider fetch tool may retrieve a remote resource from the container through OneCLI or direct egress; neither route nor authorization is established here." .
+  ar:NativeProviderWebSearch a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawProviderWebSearchTool ;
+    ar:nativeResourceKind ar:RemoteWebResource ; ar:nativeEffectType ar:Read ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_provider_web_tool_available ;
+    ar:sourceNote "A provider search tool may return search results about remote resources; the search runs on the provider's side, outside the container's network route." .
+  ar:NativeShellNetworkRequest a ar:NativeCapability ;
+    ar:nativeEndpointKind ar:NanoClawContainerShellExecution ;
+    ar:nativeResourceKind ar:RemoteNetworkEndpoint ;
+    ar:nativeEffectType ar:Transmit ;
+    ar:nativeScopeKind ar:Internet ;
+    ar:nativeRequires ar:cond_container_shell_available,
+      ar:cond_network_client_available, ar:cond_network_route_permitted ;
+    ar:sourceNote "A chosen container shell command can issue an outbound request if a suitable client and route exist; this does not assert a particular endpoint or remote mutation. Through the OneCLI gateway, a request to the host of a credential granted to the agent carries that credential (injected by the gateway, never seen by the agent); the credential is a property of the request, and what it reaches at that host is modeled only by that service's own detailed ontology." .
+
+  ar:NanoClawLocalStdioMCPTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:MCPToolEndpoint ;
+    ar:routesToKind ar:LocalStdioMCPTransport ;
+    rdfs:comment "Tool of a configured third-party stdio MCP server (a command run as a process inside the container). Its configured environment values are passed through as given, so they may carry credentials that never pass through OneCLI." .
+  ar:NanoClawAgentContainer ar:containsKind ar:LocalMCPServerProcess .
+  ar:NanoClawLocalMCPServerInvocation a ar:InvocationSurfaceKind ;
+    ar:routesToKind ar:LocalMCPServerProcess,
+      ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "Local MCP server process may perform no network access or may initiate a separate network request; the ontology conservatively records both possible network routes." .
+  ar:LocalStdioMCPTransport ar:routesToKind ar:NanoClawLocalMCPServerInvocation .
+
+  ar:NanoClawRemoteHTTPMCPTool a ar:InvocationSurfaceKind, ar:ToolEndpointKind ;
+    ar:specializesInvocationKind ar:MCPToolEndpoint ;
+    ar:routesToKind ar:RemoteHTTPMCPTransport ;
+    rdfs:comment "Tool of a configured streamable-HTTP MCP server. NanoClaw accepts only stdio and streamable HTTP (SSE is rejected); URLs must be HTTPS except localhost or host.docker.internal, and must not embed credentials, but configured request headers are passed through as given." .
+  ar:RemoteHTTPMCPTransport ar:routesToKind ar:NanoClawProxyAwareHTTPRequest,
+    ar:NanoClawDirectNetworkRequest ;
+    rdfs:comment "The client-to-MCP leg may use the gateway or direct egress. The remote MCP service's later calls are outside local OneCLI and lockdown control." .
+
+  # ── Where each step runs ──
+  ar:OneCLIHostStagedFile a ar:WorldSurfaceKind ;
+    ar:specializesKind ar:LocalFile ;
+    ar:locatedOn ar:NanoClawHostProcess ;
+    ar:hostPathPattern "data/onecli/{kind}-{sha256}.pem" ;
+    rdfs:comment "Content-addressed host copy of a gateway-contributed CA or credential stub, bind-mounted read-only into containers." .
+  ar:NanoClawHostFileSystem ar:containsKind ar:OneCLIHostStagedFile .
+  ar:OneCLICACertificate ar:locatedOn ar:NanoClawAgentContainer .
+  ar:OneCLICredentialStub ar:locatedOn ar:NanoClawAgentContainer .
+  ar:NanoClawContainerNetworkRequest ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawContainerShellExecution ar:routesToKind ar:NanoClawProxyAwareHTTPRequest, ar:NanoClawDirectNetworkRequest .
+  ar:NanoClawProviderWebFetchTool ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawLocalStdioMCPTool ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawLocalMCPServerInvocation ar:executesOn ar:NanoClawAgentContainer .
+  ar:NanoClawRemoteHTTPMCPTool ar:executesOn ar:NanoClawAgentContainer .
+  ar:OneCLIProxyInvocation ar:executesOn ar:OneCLIGateway .
+  ar:NanoClawHostReachableService ar:locatedOn ar:NanoClawHostProcess .
+  ar:NanoClawProviderWebSearchTool ar:executesOn ar:ExternalNetwork .
+  ar:OneCLIGatewayInvocation ar:executesOn ar:OneCLIGateway .
+
+  ar:NanoClawNetworkModule a ar:OntologyModule ;
+    ar:ontologyModuleId "nanoclaw-network" ;
+    ar:requiresOntologyModule "freeform-internet", "tool-endpoints", "nanoclaw-core", "nanoclaw-runtime" ;
+    rdfs:seeAlso
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/src/gateway-providers/onecli.ts>,
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/src/egress-lockdown.ts>,
+      <https://github.com/hyn0027/nanoclaw/blob/08ceb915e23fff1ec22a322cd44bb82294d9907b/container/agent-runner/src/providers/claude-config.ts> .
+}
