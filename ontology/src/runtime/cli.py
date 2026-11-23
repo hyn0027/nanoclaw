@@ -2,16 +2,16 @@
 
     python3 ontology_runtime.py sync --session <id> [--skill <name>]   # blocking, before the agent acts (host-run)
     python3 ontology_runtime.py sync --session <id> --traffic          # end of a turn: expand from its calls (host-run)
-    python3 ontology_runtime.py tick [--session <id>]                  # everything at once, by hand
-    python3 ontology_runtime.py status [--session <id>]
-    python3 ontology_runtime.py show [--session <id>]  # what the expansions added (default: latest session)
-    python3 ontology_runtime.py export [--session <id>] [--out file.trig]
+    python3 ontology_runtime.py policies [--no-generate]               # reconcile OneCLI agent copies (host-run at start)
+    python3 ontology_runtime.py tick [--session <id>]                  # everything at once, by hand (and materialize)
+    python3 ontology_runtime.py status | show | export [--session <id>]
+    python3 ontology_runtime.py questions [--all] | answer <id> | ask-scope <credential>
 
 A tick: (1) routes newly captured gateway calls to their sessions, (2) compares each
-session's agent group (skills, MCP servers, packages, bundled skills) with what its
+session's agent group (skills, MCP servers, packages, credentials) with what its
 ontology last saw and expands for sources that have no reviewed graph, (3) expands
 from the session's pending calls. Each expansion is a new named graph; state.json
-records the head expansion and the last call id, so the next tick resumes there.
+records the head expansion and the last call id, so the next run resumes there.
 """
 
 import argparse
@@ -20,19 +20,18 @@ import json
 import sys
 from pathlib import Path
 
-from rdflib import Dataset, Graph, Literal
+from rdflib import RDF, RDFS, Dataset, Graph, Literal, URIRef
 from rdflib.namespace import XSD
 
 from table_output import print_table, set_table_width
 
+from ..common.namespaces import AR
 from ..materialize.model import add_mcp_graphs, add_skill_graphs, load_model
 from . import base, capture, policies, questions, scope_questions
-from .expand import SCHEMA, SYSTEM, batches, prompt, to_graph
+from .expand import SCHEMA, SYSTEM, batches, prompt, skill_evidence, to_graph
 from .llm import LLMError, call
-from .paths import RUNTIME_DIR, SKILLS_SRC
+from .paths import RUNTIME_DIR
 from .store import RT, SessionOntology, now
-
-SKILL_SOURCE_CHARS = 60000
 
 
 def log(msg: str) -> None:
@@ -92,25 +91,6 @@ def run_expansion(ont: SessionOntology, model: Graph, *, trigger: str, title: st
     return entry
 
 
-def skill_evidence(name: str) -> str:
-    """SKILL.md plus the skill's other text files, up to a budget."""
-    root = SKILLS_SRC / name
-    parts, size = [], 0
-    for path in [root / "SKILL.md", *sorted(p for p in root.rglob("*") if p.is_file() and p.name != "SKILL.md")]:
-        try:
-            text = path.read_text()
-        except (UnicodeDecodeError, OSError):
-            parts.append(f"## {path.relative_to(root)} (binary, not shown)")
-            continue
-        block = f"## {path.relative_to(root)}\n{text}"
-        if size + len(block) > SKILL_SOURCE_CHARS:
-            parts.append(f"## {path.relative_to(root)} ({len(text)} chars, not shown: budget)")
-            continue
-        parts.append(block)
-        size += len(block)
-    return "\n\n".join(parts)
-
-
 class SyncFailed(RuntimeError):
     """A blocking sync could not finish (the agent's action is refused)."""
 
@@ -129,21 +109,17 @@ def update_base(sess: dict) -> tuple[SessionOntology, dict, list[dict], dict, bo
     if new_session:
         log(f"{sess['id']}: new session ontology {ont.ontology_id}, starting from the base model")
     if changes:
-        reviewed = base.modeled_skills()
-        for c in changes:
-            if c["what"] == "skill" and c["change"] != "removed":
-                c["reviewed_model"] = c["name"] in reviewed
-            if c["what"] == "mcp" and c["change"] != "removed":
-                c["reviewed_model"] = c["name"] in modeled_mcp
-        ont.state["base_changes"].append({"at": now(), "head": ont.state["head"], "changes": changes})
-        ont.state["base"] = fp
+        reviewed = {"skill": base.modeled_skills(), "mcp": modeled_mcp}
         queue = ont.state.setdefault("pending_sources", [])
         for c in changes:
+            if c["what"] in reviewed and c["change"] != "removed":
+                c["reviewed_model"] = c["name"] in reviewed[c["what"]]
             log(f"{sess['id']}: base {c['what']} {c['change']}: {c['name']}" + ("" if c.get("reviewed_model", True) else " (no reviewed model)"))
-            needs = (c["what"] == "skill" and c["change"] != "removed" and not c.get("reviewed_model", True)) or \
-                    (c["what"] == "package" and c["change"] == "added")
+            needs = (c["what"] == "skill" and c.get("reviewed_model") is False) or (c["what"] == "package" and c["change"] == "added")
             if needs and not any(q["what"] == c["what"] and q["name"] == c["name"] for q in queue):
                 queue.append({"what": c["what"], "name": c["name"], "change": c["change"]})
+        ont.state["base_changes"].append({"at": now(), "head": ont.state["head"], "changes": changes})
+        ont.state["base"] = fp
         if fp["bundled_skills"] != "disabled":
             log(f"{sess['id']}: warning: Claude Code bundled skills are {fp['bundled_skills']}; they have no ontology")
     ont.save()
@@ -235,17 +211,16 @@ def tick_session(sess: dict, args) -> None:
 
 def route_capture(keep_calls: bool) -> None:
     """Hand newly captured gateway calls to the sessions they belong to."""
-    after = capture.cursor()
-    records = capture.new_records(after)
-    by_session, skipped = capture.route(records, base.active_sessions())
+    records = capture.new_records(capture.cursor())
+    sessions = base.active_sessions()
+    by_session, skipped = capture.route(records, sessions)
     if records:
         log(f"capture: {len(records)} new calls; routed {sum(len(v) for v in by_session.values())}; skipped {json.dumps(skipped)}")
-    for s in base.active_sessions():
-        if s["id"] in by_session:
-            ont = SessionOntology(s["agent_group_id"], s["id"])
-            ont.add_pending(by_session[s["id"]])
-            ont.save()
-    if records:
+        for s in sessions:
+            if s["id"] in by_session:
+                ont = SessionOntology(s["agent_group_id"], s["id"])
+                ont.add_pending(by_session[s["id"]])
+                ont.save()
         capture.save_cursor(records[-1]["id"])
     if not keep_calls:
         removed = capture.prune(capture.cursor())
@@ -253,10 +228,23 @@ def route_capture(keep_calls: bool) -> None:
             log(f"capture: removed routed hour files {', '.join(removed)}")
 
 
+def run_lock(blocking: bool):
+    """The runtime-wide run lock, held while the returned file stays open; None when not
+    ``blocking`` and another run holds it."""
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    lock = open(RUNTIME_DIR / "tick.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+    except BlockingIOError:
+        lock.close()
+        return None
+    return lock
+
+
 def sync_session(sess: dict, args) -> None:
     """Blocking sync before the agent acts (a new turn, or loading a skill): base changes,
     the operator's answers (waits for them), expansions for new sources, and the agent's
-    OneCLI policy groups. Raises SyncFailed when any of it cannot finish."""
+    OneCLI policy copies. Raises SyncFailed when any of it cannot finish."""
     if args.skill and not policies.mark_loaded(sess["agent_group_id"], sess["id"], args.skill):
         log(f"{sess['id']}: skill {args.skill} is not a NanoClaw container skill; nothing to record for it")
     ont, fp, changes, modeled_mcp, new_session = update_base(sess)
@@ -268,7 +256,7 @@ def sync_session(sess: dict, args) -> None:
     try:
         summary = policies.reconcile(generate=True, log=log)
     except (policies.PolicyError, LLMError) as e:
-        raise SyncFailed(f"OneCLI policy groups: {e}") from e
+        raise SyncFailed(f"OneCLI policies: {e}") from e
     mine = [s for s, item in summary["desired"].items() if sess["agent_group_id"] in item["agents"]]
     missing = [s for s in mine if s in summary["missing"]]
     if missing:
@@ -279,9 +267,7 @@ def cmd_sync(args) -> None:
     sess = base.session(args.session)
     if not sess or sess.get("status") != "active":
         sys.exit(f"no active session {args.session}")
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    lock = open(RUNTIME_DIR / "tick.lock", "w")
-    fcntl.flock(lock, fcntl.LOCK_EX)  # wait for any other run; a sync never skips
+    lock = run_lock(blocking=True)  # noqa: F841 - kept referenced; a sync waits, never skips
     if args.traffic:
         # end of a turn: expand from the calls it made (never blocks the agent; failures retry next turn)
         route_capture(args.keep_calls)
@@ -305,12 +291,9 @@ def cmd_sync(args) -> None:
 
 
 def cmd_tick(args) -> None:
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    lock = open(RUNTIME_DIR / "tick.lock", "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        log("another tick is running; skipping")
+    lock = run_lock(blocking=False)  # kept referenced for the whole tick
+    if lock is None:
+        log("another run holds the lock; skipping")
         return
     sessions = base.active_sessions()
     if args.session:
@@ -416,8 +399,6 @@ RELATIONS = {"containsKind": "contains", "referencesKind": "references", "shares
 def abstract_changes(g: Graph) -> tuple[list[tuple[str, str]], int]:
     """What an expansion graph adds to the abstract model, as (change, description) rows,
     and how many concrete instances it adds (listed elsewhere)."""
-    from rdflib import RDF, RDFS, URIRef
-    from ..common.namespaces import AR
     rows: list[tuple[str, str]] = []
     for kind in sorted(set(g.subjects(RDF.type, AR.WorldSurfaceKind)), key=str):
         spec = ", ".join(sorted(_name(s) for s in g.objects(kind, AR.specializesKind)))
@@ -456,12 +437,11 @@ def cmd_show(args) -> None:
     print_table("Expansions", ("#", "When", "Trigger", "Calls", "Added", "Rejected", "Summary"), rows, (5, 20, 24, 6, 40, 8, 90))
     for c in ont.state["base_changes"]:
         print(f"base change at {c['at']}: " + "; ".join(f"{x['what']} {x['change']} {x['name']}" for x in c["changes"]))
-    # The abstract model each expansion added (kinds, relations, reactions, operations,
-    # correspondences); concrete instances are only counted.
+    # The abstract model each expansion added; concrete instances are only counted.
     model_rows = []
     for e in ont.state["expansions"]:
         g = Graph()
-        for named in Dataset().parse(ont.dir / e["file"], format="trig").graphs():
+        for named in ont.read_expansion(e):
             g += named
         changes, instances = abstract_changes(g)
         num = e["id"].rsplit("/", 1)[1]
@@ -482,7 +462,7 @@ def cmd_export(args) -> None:
     base_graph = ds.graph(f"urn:nanoclaw:ontology:{ont.ontology_id}/base")
     base_graph += model
     for e in ont.state["expansions"]:
-        for g in Dataset().parse(ont.dir / e["file"], format="trig").graphs():
+        for g in ont.read_expansion(e):
             named = ds.graph(g.identifier)
             named += g
     out = args.out or ont.dir / "export.trig"

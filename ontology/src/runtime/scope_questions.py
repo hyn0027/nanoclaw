@@ -5,13 +5,16 @@ One entry per environment in SCOPED (hosts its credentials are used at, the step
 apply function). Add an environment by adding an entry; questions.py stays generic.
 """
 
+import fcntl
 import json
-from datetime import datetime, timezone
+import sys
 
 from ..common.paths import ROOT
 from ..materialize.gateway_policy import granted_secrets, patterns_overlap, read_gateway_policy
-from ..materialize.instances.declarations import PATH, for_host, load, save
-from . import questions
+from ..materialize.instances.declarations import for_host, load, save
+from . import base, questions
+from .llm import call
+from .store import now
 
 LEVELS = [{"label": "None", "value": "none"}, {"label": "Read", "value": "read"}, {"label": "Read and write", "value": "write"}]
 
@@ -33,7 +36,7 @@ def github_steps(secret: dict, known_private: list[str]) -> list[dict]:
     repo_options = ([{"label": f"Only: {seen}"[:80], "value": "seen"}] if known_private else []) + [
         {"label": "Every repository it can see", "value": "all"},
         {"label": "Others: I'll type them", "value": "@text"}]
-    steps = [
+    return [
         {"id": "repos", "prompt": f"Which repositories can the '{secret['name']}' token act on?"
                                   + (f" It can see these private ones: {seen}." if known_private else ""),
          "options": repo_options, "free_text": "owner/name patterns, space-separated (owner/* for all of an owner)"},
@@ -50,7 +53,6 @@ def github_steps(secret: dict, known_private: list[str]) -> list[dict]:
          "options": [{"label": "No expiry, or I don't know", "value": "none"}, {"label": "Yes: I'll type the date", "value": "@text"}],
          "free_text": "expiry date YYYY-MM-DD"},
     ]
-    return steps
 
 
 def github_apply(q: dict, given: dict) -> str:
@@ -65,7 +67,7 @@ def github_apply(q: dict, given: dict) -> str:
         data = load()
         d = data["credentials"][meta["credential"]]
         d.update({"secretId": meta["secret_id"], "secretUpdatedAt": meta["secret_updated_at"],
-                  "confirmedAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                  "confirmedAt": now(),
                   "confirmedBy": f"question {q['id']}"})
         save(data)
         return f"kept {meta['credential']}: {json.dumps(d['scope'])}"
@@ -90,7 +92,7 @@ def write_declaration(q: dict, scope: dict, expires: str | None, note: str = "")
     data = load()
     data["credentials"][meta["credential"]] = {
         "secretId": meta["secret_id"], "secretUpdatedAt": meta["secret_updated_at"], "hostPattern": meta["host_pattern"],
-        "declaredAt": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "declaredAt": now(),
         "scope": scope, **({"expiresAt": expires} if expires else {}),
         "note": f"answered question {q['id']}" + (f"; {note}" if note else ""),
     }
@@ -153,13 +155,21 @@ def _granted(group_id: str) -> list[dict]:
     return granted_secrets(policy, agent["id"]) if agent else []
 
 
+def _scoped_host(secret: dict, env: str) -> str | None:
+    """The first of ``env``'s hosts the secret's host pattern covers."""
+    return next((h for h in SCOPED[env]["hosts"] if patterns_overlap(secret.get("hostPattern") or "", h)), None)
+
+
+def _secret_for(granted: list[dict], env: str) -> dict | None:
+    return next((s for s in granted if _scoped_host(s, env)), None)
+
+
 def ask(env: str, secret: dict, granted: list[dict], key: str, why: str, sessions: list[str],
         known_private: list[str] | None = None) -> dict:
     """Open (or reuse) the scope question for ``secret``. When a current declaration exists,
     the first step asks whether it still holds; the rest only follow a 'change'."""
     cfg = SCOPED[env]
-    host = next(h for h in cfg["hosts"] if patterns_overlap(secret.get("hostPattern") or "", h))
-    existing = for_host(granted, host)
+    existing = for_host(granted, _scoped_host(secret, env))
     existing = existing if existing and not existing.stale else None
     private = known_private if known_private is not None else known_private_repos()
     steps = cfg["steps"](secret, private)
@@ -198,13 +208,12 @@ def on_connect(group_id: str, session_id: str, changes: list[dict]) -> list[dict
         if c["what"] not in ("mcp", "credential") or c["change"] not in ("added", "changed"):
             continue
         for env in _env_for(c.get("endpoint")):
-            hosts = SCOPED[env]["hosts"]
-            secret = next((s for s in granted if any(patterns_overlap(s.get("hostPattern") or "", h) for h in hosts)), None)
+            secret = _secret_for(granted, env)
             if not secret:
                 continue  # connected, but no credential is granted for it: nothing to scope
             what = f"MCP server '{c['name']}'" if c["what"] == "mcp" else f"credential grant '{c['name']}'"
             by_secret.setdefault(secret["id"], (env, secret, []))[2].append(f"{what} {c['change']}")
-    at = questions.now()
+    at = now()
     return [ask(env, secret, granted, key=f"connect:{session_id}:{env}:{secret['id']}:{at}",
                 why=f"Just connected for this agent: {', '.join(whats)}", sessions=[session_id])
             for env, secret, whats in by_secret.values()]
@@ -214,7 +223,6 @@ def reopen(credential: str) -> list[dict]:
     """Ask again about ``credential`` for every active session whose agent is granted it
     (e.g. after widening a token's permissions on GitHub, which leaves the token, and so
     OneCLI's secret, unchanged and therefore undetectable)."""
-    from . import base
     out = []
     by_group: dict[str, list[str]] = {}
     for s in base.active_sessions():
@@ -224,9 +232,9 @@ def reopen(credential: str) -> list[dict]:
         secret = next((s for s in granted if s["name"] == credential), None)
         if not secret:
             continue
-        env = next((name for name, cfg in SCOPED.items() if any(patterns_overlap(secret.get("hostPattern") or "", h) for h in cfg["hosts"])), None)
+        env = next((name for name in SCOPED if _scoped_host(secret, name)), None)
         if env:
-            out.append(ask(env, secret, granted, key=f"manual:{secret['id']}:{questions.now()}",
+            out.append(ask(env, secret, granted, key=f"manual:{secret['id']}:{now()}",
                            why="You asked to update what it can do", sessions=sessions))
     return out
 
@@ -236,14 +244,13 @@ def needed(group_id: str, sessions: list[str], env: str | None = None, known_pri
     declaration, or a stale one."""
     granted = _granted(group_id)
     out = []
-    for name, cfg in SCOPED.items():
+    for name in SCOPED:
         if env and name != env:
             continue
-        secret = next((s for s in granted if any(patterns_overlap(s.get("hostPattern") or "", h) for h in cfg["hosts"])), None)
+        secret = _secret_for(granted, name)
         if not secret:
             continue
-        host = next(h for h in cfg["hosts"] if patterns_overlap(secret.get("hostPattern") or "", h))
-        declaration = for_host(granted, host)
+        declaration = for_host(granted, _scoped_host(secret, name))
         if declaration and not declaration.stale:
             continue
         why = f"The saved answer may no longer hold ({declaration.stale})" if declaration else "There is no saved answer yet"
@@ -254,9 +261,8 @@ def needed(group_id: str, sessions: list[str], env: str | None = None, known_pri
 
 def interpret_description(q: dict, text: str) -> dict:
     """Claude's reading of a plain-language answer to question ``q``."""
-    from .llm import call
     cfg = SCOPED[q["meta"]["env"]]
-    existing = for_host(_granted_cached(q), next(iter(cfg["hosts"])))
+    existing = for_host(_question_secret(q), cfg["hosts"][0])
     context = "\n".join([
         f"Credential: '{q['meta']['credential']}' (used at {q['meta']['host_pattern']}).",
         f"Private repositories the token can see: {', '.join(q['meta'].get('known_private') or []) or 'unknown'}.",
@@ -269,7 +275,8 @@ def interpret_description(q: dict, text: str) -> dict:
     return result
 
 
-def _granted_cached(q: dict) -> list[dict]:
+def _question_secret(q: dict) -> list[dict]:
+    """The OneCLI secret the question is about (empty when OneCLI cannot be read)."""
     try:
         policy = read_gateway_policy()
         return [s for s in (policy or {}).get("secrets", []) if s["id"] == q["meta"]["secret_id"]]
@@ -279,9 +286,8 @@ def _granted_cached(q: dict) -> list[dict]:
 
 def advance(q: dict) -> dict | None:
     """Move an open question on: interpret a new plain-language answer, or apply a
-    complete one. Returns the question when it got answered (closed). Locked, so a tick
+    complete one. Returns the question when it got answered (closed). Locked, so a sync
     and a waiting materialize never interpret the same answer twice."""
-    import fcntl
     questions.QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     with open(questions.QUESTIONS_DIR / f"{q['id']}.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -298,11 +304,9 @@ def advance(q: dict) -> dict | None:
     return None
 
 
-
 def require(group_id: str, session_id: str, env: str | None = None, known_private: list[str] | None = None) -> bool:
     """Make sure the group's credentials are declared: ask in the terminal when there is
     one, else wait for the chat answer. True when something was answered."""
-    import sys
     asked = False
     for q in needed(group_id, [session_id], env, known_private):
         if sys.stdin.isatty() and sys.stderr.isatty():

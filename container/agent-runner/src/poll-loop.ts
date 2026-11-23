@@ -10,8 +10,8 @@ import { getUndeliveredMessages, writeMessageOut } from './db/messages-out.js';
 import { clearStaleProcessingAcks } from './db/container-state.js';
 import { resolveDestinationThread } from './db/session-routing.js';
 import { touchHeartbeat } from './heartbeat.js';
-import { syncBeforeTurn } from './ontology-gate.js';
 import { getAgentMailbox } from './mailbox/index.js';
+import { syncBeforeTurn, turnRefusal } from './ontology-gate.js';
 import {
   clearContinuation,
   clearCurrentReplyRoute,
@@ -238,10 +238,7 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
     const gate = await syncBeforeTurn();
     if (!gate.ok) {
       log(`Turn refused: ontology sync failed: ${gate.error}`);
-      await deliverErrorResult(
-        routing,
-        `I can't act on this yet: updating my environment's policies failed (${gate.error ?? 'unknown error'}). It will be retried with your next message.`,
-      );
+      await deliverErrorResult(routing, turnRefusal(gate.error));
       markCompleted(keep.map((m) => m.id));
       continue;
     }
@@ -540,10 +537,7 @@ export async function processQuery(
         const gate = await syncBeforeTurn();
         if (!gate.ok) {
           log(`Follow-up turn refused: ontology sync failed: ${gate.error}`);
-          await deliverErrorResult(
-            extractRouting(keep),
-            `I can't act on this yet: updating my environment's policies failed (${gate.error ?? 'unknown error'}). It will be retried with your next message.`,
-          );
+          await deliverErrorResult(extractRouting(keep), turnRefusal(gate.error));
           markCompleted(keep.map((m) => m.id));
           return;
         }

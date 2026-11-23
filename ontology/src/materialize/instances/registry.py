@@ -17,8 +17,8 @@ passes for the session, in registration order, with a ``Context``:
 Rules for a source:
 
 - ``kinds`` are the model kinds (local names, e.g. "GitHubRepository") it lists. They
-  count as discovered once the function returns without ``ctx.fail``, even if it found
-  none, so "none exists" can be told apart from "not enumerated".
+  count as discovered once the function returns, even if it found none, so "none
+  exists" can be told apart from "not enumerated".
 - Set ``parent`` to the containing instance's id, following the model's
   ar:containsKind, so resolution can place new instances ("new X in <parent>") and
   narrow by scope. Put a ``match`` attr on instances a row location can name (a host,
@@ -33,24 +33,20 @@ Rules for a source:
   ``ctx.restrict(why, check)``; check(instance, kind, effect) returns False when the
   effect cannot reach the instance, and resolution then leaves it out and says so.
   Compare the declaration with what you observe and ``ctx.warn`` on mismatches.
-- On a failure that stops the source, call ``ctx.fail(reason)``: its kinds get the
-  reason as a note and are not marked discovered. Partial gaps (e.g. a listing that
-  only covers owned repositories) go in ``ctx.note(kinds, text)``.
+- A ``ProbeError`` that escapes the source stops it: its kinds get the error as a note
+  and are not marked discovered. Partial gaps (e.g. a listing that only covers owned
+  repositories) go in ``ctx.note(kinds, text)``.
 
 Modules in ``instances/envs/`` are imported automatically, so adding an environment
 is adding one module there.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 from ..probe import ContainerProbe, ProbeError
 from ..snapshot import Snapshot
 from .model import Instance, Instances
-
-
-class SourceFailed(Exception):
-    pass
 
 
 @dataclass
@@ -65,9 +61,6 @@ class Context:
 
     def note(self, kinds: list[str], text: str) -> None:
         self.instances.note(kinds, text)
-
-    def fail(self, reason: str) -> None:
-        raise SourceFailed(reason)
 
     def warn(self, text: str) -> None:
         self.instances.warnings.append(f"{self.source.name}: {text}")
@@ -92,20 +85,19 @@ class Source:
     name: str
     kinds: list[str]
     run: Callable[[Context], None]
-    live: bool = False
-    applies: Callable[[Snapshot], bool] = field(default=lambda snap: True)
-    description: str = ""
+    live: bool
+    applies: Callable[[Snapshot], bool]
+    description: str  # the function's docstring summary, shown as the kinds' source
 
 
 SOURCES: list[Source] = []
 
 
-def environment(name: str, kinds: list[str], live: bool = False,
-                applies: Callable[[Snapshot], bool] = lambda snap: True, description: str = ""):
+def environment(name: str, kinds: list[str], live: bool = False, applies: Callable[[Snapshot], bool] = lambda snap: True):
     """Register the decorated function as the instance source of an environment."""
     def register(fn: Callable[[Context], None]) -> Callable[[Context], None]:
         doc = (fn.__doc__ or "").strip().splitlines()
-        SOURCES.append(Source(name, kinds, fn, live, applies, description or (doc[0] if doc else name)))
+        SOURCES.append(Source(name, kinds, fn, live, applies, doc[0] if doc else name))
         return fn
     return register
 
@@ -119,7 +111,7 @@ def run_sources(snap: Snapshot, instances: Instances, probe: ContainerProbe | No
             continue
         try:
             source.run(Context(snap, instances, probe, source))
-        except (SourceFailed, ProbeError) as e:
+        except ProbeError as e:
             instances.note(source.kinds, f"{source.name}: {e}")
             continue
         instances.ran(source.kinds, source.description)

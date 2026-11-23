@@ -5,14 +5,13 @@
  * steps, each a prompt with at most five options — to
  * data/ontology-runtime/questions/<id>.json when it needs a fact it cannot observe
  * (e.g. a GitHub token's scope). This module sends the owner one card per step, in
- * order, and records each click in data/ontology-runtime/answers/<id>.json (this
- * module is that file's only writer; Python only reads it). When every step is
- * answered, the next tick applies the answers and marks the question answered; this
- * module then confirms with a short DM.
+ * order, and records each answer (a click, or the operator's next DM after a "type
+ * it" option) in data/ontology-runtime/answers/<id>.json (this module is that file's
+ * only writer; Python only reads it). The waiting Python sync applies a complete
+ * answer and marks the question answered; this module then confirms with a short DM.
  *
  * The recipient is picked like an approval's (global admins, then owners). Only that
- * user's clicks count. A "type it in a terminal" option is answered with the
- * terminal command instead of being recorded.
+ * user's answers count.
  */
 import fs from 'fs';
 import path from 'path';
@@ -198,7 +197,7 @@ export async function deliverQuestions(): Promise<void> {
     }
     const index = q.steps.indexOf(step);
     const first = Object.keys(host.sent).length === 0;
-    const terminal = step.options.some((o) => o.value === '@text')
+    const terminal = step.options.some((o) => o.value === TEXT)
       ? `\n\n(Or answer everything in a terminal: \`${terminalCommand(q.id)}\`)`
       : '';
     await send(target, {
@@ -243,15 +242,14 @@ async function handleResponse(payload: ResponsePayload): Promise<boolean> {
     await send(target, {
       text:
         key === DESCRIBE
-          ? 'Describe the token\'s access in your own words in your next message here, e.g. "read and write on code, issues, pull requests and commit statuses in hyn0027/agent-playground, no account permissions, expires 2027-01-14". That message goes to the ontology, not to the agent.'
+          ? 'Describe the token\'s access in your own words in your next message here, e.g. "read and write on code, issues and pull requests in owner/repo, no account permissions, expires 2027-01-14". That message goes to the ontology, not to the agent.'
           : `Type ${step.free_text ?? 'the value'} in your next message here (it goes to the ontology, not to the agent).`,
     });
     return true;
   }
   saveHost(id, { ...host, answers: { ...host.answers, [step.id]: option.value } });
   log.info('Ontology question answered', { questionId: id, step: step.id, value: option.value });
-  // The next step goes out on the module's next poll; the tick that follows applies a complete answer.
-  return true;
+  return true; // the next step goes out on the next delivery round
 }
 
 /** Router interceptor: the operator's next DM after they chose to type an answer. */

@@ -38,7 +38,6 @@ USER_PERMISSION = {
     "GitHubCopilotSpace": "copilot", "GitHubNotification": "notifications",
 }
 
-
 # Reading these needs a different permission than changing them (a repository's metadata
 # is readable with "metadata"; changing its settings needs "administration").
 READ_PERMISSION = {"GitHubRepository": "metadata"}
@@ -113,14 +112,14 @@ def workflow_events(text: str) -> list[str]:
 
 
 def _server(snap) -> tuple[str, dict] | None:
-    names = [name for name, sid in snap.facts.get("modeled_mcp", {}).items() if sid == SERVER_ID]
+    names = [name for name, sid in snap.facts["modeled_mcp"].items() if sid == SERVER_ID]
     return (names[0], (snap.facts["config"].get("mcp_servers") or {})[names[0]]) if names else None
 
 
 @environment("github", kinds=KINDS, live=True, applies=lambda snap: _server(snap) is not None)
 def github(ctx: Context) -> None:
     """GitHub MCP as the agent (get_me, search_repositories, get_file_contents)"""
-    name, spec = _server(ctx.snap)
+    _, spec = _server(ctx.snap)
     mcp = ctx.probe.mcp(spec["url"], read_only_tools(SERVER_ID), spec.get("headers") or {})
     me = mcp.call("get_me", {})
     user = ctx.add(Instance("GitHubUser", f"github:{me['login']}", f"{me['login']} (the token's user)"))

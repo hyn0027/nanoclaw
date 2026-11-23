@@ -62,13 +62,13 @@ describe('package specs', () => {
 });
 
 describe('installed versions', () => {
-  it('reads dpkg lines and the pnpm global listing', async () => {
+  it('reads dpkg lines and the npm probe output', async () => {
     const { parseInstalled } = await import('./package-lock.js');
     const out = [
       '__NANOCLAW_APT__',
       'ffmpeg=7:6.1.1-3',
       '__NANOCLAW_NPM__',
-      JSON.stringify([{ dependencies: { vercel: { version: '39.1.0' }, '@s/pkg': { version: '1.2.3' } } }]),
+      JSON.stringify({ vercel: '39.1.0', '@s/pkg': '1.2.3' }),
     ].join('\n');
     expect(parseInstalled(out, ['ffmpeg', 'curl'], ['vercel', '@s/pkg@1.2.3'])).toEqual({
       apt: { ffmpeg: '7:6.1.1-3', curl: null },

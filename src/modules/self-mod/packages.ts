@@ -12,10 +12,10 @@
  * (container/agent-runner/src/mcp-tools/self-mod.ts); keep the two in sync.
  */
 
-export const APT_SPEC_RE = /^[a-z0-9][a-z0-9._+-]*(=[0-9][A-Za-z0-9.+~:-]*)?$/;
-export const NPM_SPEC_RE =
+const APT_SPEC_RE = /^[a-z0-9][a-z0-9._+-]*(=[0-9][A-Za-z0-9.+~:-]*)?$/;
+const NPM_SPEC_RE =
   /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$/;
-export const MAX_PACKAGES = 20;
+const MAX_PACKAGES = 20;
 
 export type PackageKind = 'apt' | 'npm';
 
@@ -35,19 +35,16 @@ export function invalidSpec(kind: PackageKind, spec: string): string | null {
     : `invalid npm package "${spec}": use a name or name@<exact version> like @scope/pkg@1.2.3 (no ranges, tags, URLs or flags)`;
 }
 
+/** Why the first invalid spec in the lists is invalid, or null. */
+export function firstInvalidSpec(apt: string[], npm: string[]): string | null {
+  return [...apt.map((s) => invalidSpec('apt', s)), ...npm.map((s) => invalidSpec('npm', s))].find(Boolean) ?? null;
+}
+
 /** The first problem with a request's package lists, or null. */
 export function validatePackages(apt: string[], npm: string[]): string | null {
   if (apt.length + npm.length === 0) return 'at least one apt or npm package is required';
   if (apt.length + npm.length > MAX_PACKAGES) return `max ${MAX_PACKAGES} packages per request`;
-  for (const spec of apt) {
-    const why = invalidSpec('apt', spec);
-    if (why) return why;
-  }
-  for (const spec of npm) {
-    const why = invalidSpec('npm', spec);
-    if (why) return why;
-  }
-  return null;
+  return firstInvalidSpec(apt, npm);
 }
 
 /** Add specs to a list; a spec replaces an existing entry for the same package (so a pin can change). */

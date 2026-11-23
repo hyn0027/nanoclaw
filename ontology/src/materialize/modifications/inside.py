@@ -12,9 +12,9 @@ from rdflib.namespace import RDF
 
 from ...common.namespaces import AR, OBS
 from ...common.rdf import short
-from ..constants import CONTAINER_ONLY, MUTATING_EFFECTS, SUBPATHS
+from ..constants import CONTAINER_ONLY, MUTATING_EFFECTS
 from ..snapshot import Snapshot
-from .common import CapabilityHit, gate, host_backing, location, merge, reported_capabilities
+from .common import CapabilityHit, gate, host_backing, location, merge, reported_capabilities, subpath
 
 # Container paths of resources targeted by a specific capability.
 KNOWN_PATHS = {
@@ -80,9 +80,7 @@ def location_rows(snap: Snapshot) -> list[tuple]:
             # A sub-kind behind its own read-only mount gets that mount's row instead.
             if (writable and sub in ro_kinds) or (sub, RDF.type, AR.WorldSurfaceKind) not in m:
                 continue
-            tail = SUBPATHS.get(sub, "")
-            if isinstance(tail, dict):
-                tail = tail.get(kind, "")
+            tail = subpath(sub, kind)
             sub_c = f"{dest}/{tail}" if dest and tail else cpath
             sub_h = f"{hpath}/{tail}" if dest and tail else hpath
             rows.append((f"└ {short(sub)}", location(sub_c, mode, sub_h), effects, via, status, gate(snap, [], sub, *endpoints)))

@@ -62,7 +62,7 @@ def granted_credentials(group_id: str) -> dict | None:
     from ..materialize.gateway_policy import granted_secrets, read_gateway_policy
     try:
         policy = read_gateway_policy()
-    except Exception:  # noqa: BLE001 - unreachable OneCLI must not stop a tick
+    except Exception:  # noqa: BLE001 - unreachable OneCLI must not stop a sync
         return None
     if policy is None:
         return None
@@ -123,9 +123,7 @@ def diff(old: dict | None, new: dict) -> list[dict]:
         out += [{"what": "package", "change": "added", "name": f"{manager}:{p}"} for p in sorted(after - before)]
         out += [{"what": "package", "change": "removed", "name": f"{manager}:{p}"} for p in sorted(before - after)]
     before, after = old.get("credentials") or {}, new.get("credentials")
-    # None: OneCLI unreadable this time, compare next time. A base recorded before
-    # credentials were tracked has no entry: this run is the baseline, not a change.
-    if after is not None and (not old.get("skills") and not old.get("mcp_servers") or "credentials" in old):
+    if after is not None:  # None: OneCLI unreadable (and no earlier reading), compare next time
         for name in sorted(set(before) | set(after)):
             if name not in before:
                 out.append({"what": "credential", "change": "added", "name": name, "endpoint": after[name]["hostPattern"]})

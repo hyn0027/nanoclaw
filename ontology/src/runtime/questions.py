@@ -25,30 +25,22 @@ the sessions it concerns (the operator's choice: wait rather than assume).
 """
 
 import json
-import os
 import secrets
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import RUNTIME_DIR
+from .store import now, write_atomic
 
 QUESTIONS_DIR = RUNTIME_DIR / "questions"
 ANSWERS_DIR = RUNTIME_DIR / "answers"
 MAX_OPTIONS = 5
 
 
-def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
 def _write(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n")
-    os.chmod(tmp, 0o600)
-    tmp.replace(path)
+    write_atomic(path, json.dumps(data, indent=2) + "\n")
 
 
 def all_questions() -> list[dict]:
@@ -185,6 +177,9 @@ def ask_tty(q: dict) -> dict:
         given[key] = value
         _write(ANSWERS_DIR / f"{q['id']}.terminal.json", {"answers": given, "updated_at": now()})
 
+    def describe() -> str:
+        return input("describe the access in your own words: ").strip()
+
     while True:
         if (text := needs_interpretation(q, given)) is not None:
             print("  … working out what that means", file=sys.stderr, flush=True)
@@ -203,7 +198,7 @@ def ask_tty(q: dict) -> dict:
         if raw.isdigit() and 1 <= int(raw) <= len(step["options"]):
             value = step["options"][int(raw) - 1]["value"]
             if value == NL or value == "again":
-                text = input("describe the access in your own words: ").strip()
+                text = describe()
                 if text:
                     if value == "again":
                         record(step["id"], value)
@@ -216,8 +211,7 @@ def ask_tty(q: dict) -> dict:
                 continue
             record(step["id"], value)
         elif raw.lower() in ("d", "describe"):
-            text = input("describe the access in your own words: ").strip()
-            if text:
+            if text := describe():
                 record(DESCRIBE, "text:" + text)
         elif step.get("free_text") and " " not in raw:
             record(step["id"], "text:" + raw)  # a typed value (pattern, date)
@@ -233,15 +227,14 @@ def interpret(q: dict, text: str) -> dict:
     return add_interpretation(q, text, result)
 
 
-def wait(q: dict, advance=None, poll_s: int = 5) -> None:
+def wait(q: dict, advance, poll_s: int = 5) -> None:
     """Block until the question is answered in chat or in another terminal. ``advance``
     (scope_questions.advance) interprets plain-language answers as they arrive."""
     print(f"waiting for your answer to '{q['title']}' (question {q['id']}): sent to you as a direct message by NanoClaw; "
           f"or answer in a terminal: cd ontology && .venv/bin/python ontology_runtime.py answer {q['id']}", file=sys.stderr, flush=True)
     last = -1
     while True:
-        if advance is not None:
-            advance(q)
+        advance(q)
         q = get(q["id"]) or q
         if q["status"] != "open" or complete(q):
             return

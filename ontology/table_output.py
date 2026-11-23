@@ -7,7 +7,6 @@ from textwrap import wrap
 # as (title, headers, rows), for logs that keep the full cell contents.
 _recorded: list[tuple[str, tuple[str, ...], list[tuple[str, ...]]]] | None = None
 
-
 # Total width every table is fitted into (columns plus " | " separators). None: the
 # terminal's width when known, else FALLBACK_WIDTH (e.g. when output is redirected).
 _max_total: int | None = None
@@ -21,28 +20,24 @@ def set_table_width(total: int | None) -> None:
     _max_total = total
 
 
-def table_width() -> int:
-    return _max_total or shutil.get_terminal_size((FALLBACK_WIDTH, 24)).columns
+def record_tables(sink: list | None) -> None:
+    """Start (a list) or stop (None) recording printed tables."""
+    global _recorded
+    _recorded = sink
 
 
-def fit_widths(widths: list[int], headers: tuple[str, ...], total: int) -> list[int]:
+def fit_widths(widths: list[int], total: int) -> list[int]:
     """Shrink the widest columns until the table fits ``total`` characters, keeping each
-    column at least MIN_COLUMN wide (or its header's width, if smaller)."""
+    column at least MIN_COLUMN wide (or its natural width, if smaller)."""
     widths = list(widths)
     budget = total - 3 * (len(widths) - 1)
-    floors = [min(w, max(MIN_COLUMN, min(len(h), MIN_COLUMN))) for w, h in zip(widths, headers)]
+    floors = [min(w, MIN_COLUMN) for w in widths]
     while sum(widths) > budget:
         i = max(range(len(widths)), key=lambda j: widths[j] - floors[j])
         if widths[i] <= floors[i]:
             break  # cannot shrink further; the table stays wider than the limit
         widths[i] -= 1
     return widths
-
-
-def record_tables(sink: list | None) -> None:
-    """Start (a list) or stop (None) recording printed tables."""
-    global _recorded
-    _recorded = sink
 
 
 def _wrap_line(line: str, width: int) -> list[str]:
@@ -61,10 +56,9 @@ def print_table(
     """Print rows with aligned columns, wrapping long cell contents.
 
     Cells may hold several lines; indented lines stay indented when wrapped.
-    The table is fitted into table_width() characters: the widest columns shrink
-    first (cells wrap more), none below MIN_COLUMN.
-    record_rows, when given, is what gets recorded instead of rows (the full
-    contents behind a shortened terminal display).
+    The table is fitted into the table width: the widest columns shrink first
+    (cells wrap more), none below MIN_COLUMN. record_rows, when given, is what gets
+    recorded instead of rows (the full contents behind a shortened terminal display).
     When any cell spans several lines, rows are separated by a rule.
     """
     if not rows:
@@ -75,7 +69,7 @@ def print_table(
         min(limit, max(len(header), *(len(line) for row in rows for line in (row[index].splitlines() or [""]))))
         for index, (header, limit) in enumerate(zip(headers, max_widths))
     ]
-    widths = fit_widths(widths, tuple(headers), table_width())
+    widths = fit_widths(widths, _max_total or shutil.get_terminal_size((FALLBACK_WIDTH, 24)).columns)
     rule = "-+-".join("-" * width for width in widths)
     multiline = any("\n" in cell for row in rows for cell in row)
     print(f"\n{title}")

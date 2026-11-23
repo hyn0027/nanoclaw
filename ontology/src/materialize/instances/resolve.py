@@ -178,12 +178,6 @@ def _targets(snap: Snapshot, kind_name: str, effect: str, location, scope, creat
     return [Target(kind_name, f"not enumerated: {note or f'no instance source for {kind_name}'}", "unenumerated")]
 
 
-def resolve(snap: Snapshot, kind_name: str, effect: str, location: str | None = None,
-            scope: frozenset[str] | None = None, created: frozenset[str] = frozenset(), direct: bool = True) -> list[str]:
-    """The targets' labels, for the tables."""
-    return [t.label for t in targets(snap, kind_name, effect, location, scope, created, direct)]
-
-
 def scope_of(snap: Snapshot, kind_name: str, effect: str, location: str | None = None) -> frozenset[str] | None:
     """Instance ids an effect lands on (its own instances, else their containers), narrowed
     to those the row's location names; None if unknown."""

@@ -256,17 +256,18 @@ def _union(values: list[str]) -> str:
     return "\n".join("\n".join(heads + [body]) if heads else body for body, heads in bodies.items())
 
 
-def merge_rows(rows: list[tuple], key_width: int, effects: int, via: int, gate: int) -> list[tuple]:
-    """Combine rows for the same resource at the same location (first ``key_width`` columns).
+def merge_rows(rows: list[tuple]) -> list[tuple]:
+    """Combine (resource, location, effects, via, status, gate) rows for the same
+    resource at the same location.
 
     Effects and via are unioned and statuses listed one per line. When the merged
     rows have different gates, each gate is listed under a "[...]" line naming
     what it applies to.
     """
-    status = gate - 1
+    effects, via, status, gate = 2, 3, 4, 5
     groups: dict[tuple, list[tuple]] = {}
     for row in rows:
-        groups.setdefault((row[0].strip(" └"),) + tuple(row[1:key_width]), []).append(row)
+        groups.setdefault((row[0].strip(" └"), row[1]), []).append(row)
     out = []
     for group in groups.values():
         if len(group) == 1:

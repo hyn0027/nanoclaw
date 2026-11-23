@@ -142,13 +142,13 @@ async function setupFingerprint(agentGroupId: string): Promise<string> {
 
 // ── running the Python runtime ─────────────────────────────────────────────
 
-/** Run `ontology_runtime.py sync ...`; resolves with the failure reason, or null on success. */
-function runSync(args: string[]): Promise<string | null> {
+/** Run `ontology_runtime.py <args>`; resolves with the failure reason, or null on success. */
+function runRuntime(args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
     const env = { ...process.env, PATH: `${process.env.PATH ?? ''}:${path.join(os.homedir(), '.local', 'bin')}` };
-    const child = spawn(PYTHON, [ENTRY, 'sync', ...args], { cwd: ONTOLOGY_DIR, env, stdio: ['ignore', out, 'pipe'] });
+    const child = spawn(PYTHON, [ENTRY, ...args], { cwd: ONTOLOGY_DIR, env, stdio: ['ignore', out, 'pipe'] });
     children.add(child);
     let failure = '';
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -168,7 +168,8 @@ function runSync(args: string[]): Promise<string | null> {
       if (code === 0) resolve(null);
       else
         resolve(
-          failure || `ontology sync exited with ${signal ?? `code ${code}`} (see logs/ontology-runtime/runtime.log)`,
+          failure ||
+            `ontology ${args[0]} exited with ${signal ?? `code ${code}`} (see logs/ontology-runtime/runtime.log)`,
         );
     });
   });
@@ -193,11 +194,11 @@ async function handleSync(session: Session, requestId: string, reason: string, s
   const started = Date.now();
   const error = await enqueue(session.id, async () => {
     if (reason === 'skill' && skill) {
-      return runSync(['--session', session.id, '--skill', skill]);
+      return runRuntime(['sync', '--session', session.id, '--skill', skill]);
     }
     const before = await setupFingerprint(session.agent_group_id);
     if (synced.get(session.id) === before) return null;
-    const failed = await runSync(['--session', session.id]);
+    const failed = await runRuntime(['sync', '--session', session.id]);
     if (!failed) synced.set(session.id, before);
     return failed;
   });
@@ -232,7 +233,7 @@ registerDeliveryAction(
     trafficQueued.add(session.id);
     void enqueue(session.id, () => {
       trafficQueued.delete(session.id);
-      return runSync(['--session', session.id, '--traffic']);
+      return runRuntime(['sync', '--session', session.id, '--traffic']);
     }).then((error) => {
       if (error)
         log.warn('Ontology traffic expansion failed; retried after the next turn', { sessionId: session.id, error });
@@ -263,14 +264,9 @@ onHostStart(() => {
   void pollQuestions();
   // Once at start: switch off policy groups no active session needs any more (sessions
   // closed while the host was down). Every sync reconciles them again.
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-  const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
-  const reconcile = spawn(PYTHON, [ENTRY, 'policies', '--no-generate'], {
-    cwd: ONTOLOGY_DIR,
-    stdio: ['ignore', out, out],
+  void runRuntime(['policies', '--no-generate']).then((error) => {
+    if (error) log.warn('Ontology policy reconcile failed', { error });
   });
-  reconcile.on('exit', () => fs.closeSync(out));
-  reconcile.on('error', (err) => log.warn('Ontology policy reconcile could not start', { err }));
   log.info('Ontology runtime started (agent-driven sync)', { log: path.join(LOG_DIR, 'runtime.log') });
 });
 

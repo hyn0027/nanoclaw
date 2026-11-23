@@ -54,8 +54,9 @@ unknown kind, instance, or effect type is dropped and listed as rejected.
   switched off by the next sync of any session and once at host start. Output:
   `logs/ontology-runtime/runtime.log`. Off with `NANOCLAW_ONTOLOGY_RUNTIME=false`, or when
   `ontology/.venv` is missing (containers then never wait).
-- **Runtime** (`ontology/src/runtime/`, Python). `sync` is what the host runs (above); `tick` (by hand) routes new captured calls to the active
-  sessions of the agent group they came from, records base changes, and expands.
+- **Runtime** (`ontology/src/runtime/`, Python). `sync` is what the host runs (above); `tick`
+  (by hand) routes new captured calls to the active sessions of the agent group they came
+  from, records base changes, and expands.
 
 ## State and resuming
 
@@ -76,24 +77,24 @@ hour is over; expanded calls are removed from `pending.jsonl` (`tick --keep-call
 
 ## OneCLI policy groups follow what is loaded
 
-The gateway denies whatever no Cedar policy permits. Only groups without a `skill:`/`mcp:`
-source (`default`: the model API) are always on. The rest follow the active sessions:
+The gateway denies whatever no Cedar policy permits. Only the operator's workspace groups
+(`default`: the model API) are always on. Each agent's copy of a `skill:`/`mcp:` group (see
+**Per agent** below) follows that agent's active sessions:
 
-- `skill:<name>` groups are on while some active session has loaded the skill: the agent
-  invoked it (`Skill` tool call, or reading its `SKILL.md`, seen in the session's action log).
-  The host watches running sessions' action logs every 2 s and runs
-  `ontology_runtime.py policies` at once, so the switch lands within seconds; the first
-  request right after loading can still race it;
-- `mcp:<id>` groups are on while some active session's agent group has that MCP server;
-- switching a group on switches every policy in it on (every operation of what was loaded;
+- a `skill:<name>` copy is on while one of the agent's active sessions has loaded the skill: the agent
+  invoked it (`Skill` tool call, or reading its `SKILL.md`). The agent waits for the switch
+  before the skill loads (`sync --skill`, above); a skill read some other way is picked up
+  from the action log by the end-of-turn sync;
+- an `mcp:<id>` copy is on while the agent group has that MCP server and a session is active;
+- switching a copy on switches every policy in it on (every operation of what was loaded;
   the GitHub group is generated with no approval holds);
-- a group no active session needs any more is switched off (each tick reconciles: sessions
-  closed, servers removed);
-- a loaded skill or server with no group gets one: from the pinned snapshot for an MCP server
+- a copy its agent no longer needs is switched off (every sync, and `policies --no-generate`
+  at host start, reconciles: sessions closed, servers removed);
+- a loaded skill or server with no template gets one: from the pinned snapshot for an MCP server
   (`generate_mcp_policies.py --all-on --no-approval`), otherwise drafted by Claude (`claude -p`)
   from the skill's files and its ontology's declared destinations, validated by OneCLI on save
   (retried with the validator's error). Drafts never permit all hosts, so a skill with no fixed
-  destinations (e.g. `agent-browser`) gets an empty group.
+  destinations (e.g. `agent-browser`) gets an empty template.
 
 Groups and the state of the last reconcile: `data/ontology-runtime/policies.json`; skills each
 session loaded: `<session>/ontology/loads.json`. Code: `ontology/src/runtime/policies.py`.
@@ -111,8 +112,7 @@ runtime. The runtime only derives the agent layer:
   that agent (`principal == OneCLI::Agent::"<uuid>"`), on only while that agent needs it, and shown
   on that agent's Policies page;
 - a copy without a template is kept and used as is (a group for that agent only); a template is
-  made only for an agent that has no copy yet. Templates found in OneCLI (from before) are moved
-  out to files automatically.
+  made only for an agent that has no copy yet.
 
 So one agent loading a skill opens nothing for another agent. Likewise, "ever loaded" (which
 skills materialize includes) is read only from the agent group's own sessions. A copy is made
@@ -137,9 +137,10 @@ A session that starts already connected with a current saved answer is not asked
 - otherwise the question is written to `data/ontology-runtime/questions/<id>.json` and the
   host DMs the owner (global admins first, like approvals) one button card per step:
   repositories, access preset (or per area), account permissions, expiry. Clicks are recorded
-  in `data/ontology-runtime/answers/<id>.json`; options that need typing (repository
-  patterns, an expiry date) point to `ontology_runtime.py answer <id>` in a terminal;
-- when every step is answered, the next tick writes the declaration, closes the question,
+  in `data/ontology-runtime/answers/<id>.json`. Options that need typing (repository
+  patterns, an expiry date) take your next DM (below); `ontology_runtime.py answer <id>`
+  answers in a terminal instead;
+- when every step is answered, the waiting sync writes the declaration, closes the question,
   and the host confirms by DM.
 
 **In your own words.** Every question's first card has "Describe it in my own words"; in the

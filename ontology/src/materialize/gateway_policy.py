@@ -17,11 +17,12 @@ Everything is read (read-only) from OneCLI's Postgres: the 2.14 CLI needs a
 user login and no longer lists rules. Secret values, 1Password references, and
 agent access tokens are never selected.
 
-Policies are summarized, not evaluated: the policy head and the common `when`
+Policies are summarized (``parse_policy``): the policy head and the common `when`
 clauses (`resource.name like`, `context.path like`, `context.method ==`,
 `principal.identifier ==`) are parsed into a host/method/path label; any other
 condition marks the policy "conditional" and is treated as applying, so the
-results stay may-claims.
+results stay may-claims. A concrete request can also be put to the gateway's own
+evaluator (``evaluate``).
 """
 
 import json
@@ -45,15 +46,14 @@ select json_build_object(
     from agents a), '[]'::json),
   'secrets', coalesce((select json_agg(json_build_object(
       'id', s.id, 'name', s.name, 'type', s.type, 'hostPattern', s.host_pattern, 'pathPattern', s.path_pattern,
-      'scope', s.scope, 'workspaceId', s.workspace_id, 'organizationId', s.organization_id,
-      'createdAt', s.created_at, 'updatedAt', s.updated_at))
+      'scope', s.scope, 'workspaceId', s.workspace_id, 'updatedAt', s.updated_at))
     from secrets s), '[]'::json),
   'grants', coalesce((select json_agg(json_build_object(
-      'name', r.name, 'workspaceId', r.workspace_id, 'organizationId', r.organization_id,
+      'name', r.name, 'workspaceId', r.workspace_id,
       'agentIds', (select coalesce(json_agg(i.agent_id), '[]'::json) from policy_rule_identities i where i.rule_id = r.id and i.agent_id is not null),
       'viaUserOrGroup', exists(select 1 from policy_rule_identities i where i.rule_id = r.id and (i.user_id is not null or i.group_id is not null)),
       'targets', (select coalesce(json_agg(json_build_object(
-          'kind', t.kind, 'secretId', t.secret_id, 'secretScope', t.secret_scope, 'appProvider', t.app_provider)), '[]'::json)
+          'kind', t.kind, 'secretId', t.secret_id, 'secretScope', t.secret_scope)), '[]'::json)
         from policy_rule_targets t where t.rule_id = r.id)))
     from policy_rules_v2 r
     where r.status = 'published' and r.enabled and not r.is_default and r.action = 'allow'
@@ -85,11 +85,7 @@ _ignored_groups: set[str] = set()
 
 def set_ignored_groups(names) -> None:
     _ignored_groups.clear()
-    _ignored_groups.update(names or ())
-
-
-def ignored_groups() -> set[str]:
-    return set(_ignored_groups)
+    _ignored_groups.update(names)
 
 
 def _ignored(policy_id: str | None) -> bool:
@@ -97,10 +93,9 @@ def _ignored(policy_id: str | None) -> bool:
 
 
 def read_gateway_policy() -> dict | None:
-    """{"cedarTable", "strict", "agents", "secrets", "grants", "policies"}, or None when the database is unreachable.
-
-    Each policy carries its parsed ``scope`` (see ``parse_policy``).
-    """
+    """{"cedarTable", "strict", "agents", "secrets", "grants", "policies", "ignoredPolicies"}, or None
+    when the database is unreachable. Each policy carries its parsed ``scope`` (``parse_policy``);
+    policies of ignored groups (``set_ignored_groups``) are moved to "ignoredPolicies"."""
     argv = [
         tool("docker"), "exec", "-i", POSTGRES_CONTAINER, "sh", "-c",
         'psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-onecli}" -At -v ON_ERROR_STOP=1',
@@ -112,7 +107,6 @@ def read_gateway_policy() -> dict | None:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return None
     policy["strict"] = read_strict_deny()
-    # Ignored groups (set_ignored_groups) are left out as if they did not exist.
     policy["ignoredPolicies"] = [p for p in policy["policies"] if p.get("group") in _ignored_groups]
     policy["policies"] = [p for p in policy["policies"] if p.get("group") not in _ignored_groups]
     for p in policy["policies"]:
@@ -151,25 +145,22 @@ GATEWAY_API = os.environ.get("ONECLI_GATEWAY_API", "http://127.0.0.1:10255")
 _evaluations: dict[tuple, dict | None] = {}
 
 
-def api_key(nanoclaw_env: Path | None = None) -> str | None:
+def api_key(nanoclaw_env: Path) -> str | None:
     """OneCLI API key: $ONECLI_API_KEY, else the NanoClaw checkout's .env. Used only to
     authenticate to the gateway; never printed or recorded."""
     if os.environ.get("ONECLI_API_KEY"):
         return os.environ["ONECLI_API_KEY"]
-    env = nanoclaw_env
-    if env is None:
-        return None
     try:
-        for line in env.read_text().splitlines():
+        for line in nanoclaw_env.read_text().splitlines():
             if line.startswith("ONECLI_API_KEY="):
                 return line.split("=", 1)[1].strip() or None
     except OSError:
-        return None
+        pass
     return None
 
 
-def evaluate(agent_id: str, method: str, host: str, path: str = "/", body: str | None = None,
-             has_credential: bool = False, nanoclaw_env: Path | None = None) -> dict | None:
+def evaluate(agent_id: str, method: str, host: str, path: str, body: str,
+             has_credential: bool, nanoclaw_env: Path) -> dict | None:
     """The gateway's own decision for a described request (POST /v1/cedar/evaluate):
     {"decision": "allow" | "approval" | "deny", "policy": Cedar id or None, "reason": ...}.
     None when the gateway cannot be asked. Nothing is forwarded or rate-counted."""
@@ -419,21 +410,6 @@ def rule_label(p: dict) -> str:
     return f"{','.join(sc['methods']) if sc['methods'] else '*'} {sc['host'] or '*'}{sc['path'] or ''}"
 
 
-def rule_flags(p: dict) -> list[str]:
-    """Parsed annotations and scope markers of a policy, as tokens."""
-    sc = p["scope"]
-    flags = []
-    if sc["approval"]:
-        flags.append("@approval")
-    if sc["rate_limit"]:
-        flags.append(f"@rate_limit={sc['rate_limit']}")
-    if sc["identifiers"] or sc["agent_ids"]:
-        flags.append("principal-scoped")
-    if sc["conditional"]:
-        flags.append("conditional")
-    return flags
-
-
 def effective_mode(policy: dict | None) -> tuple[str, str]:
     """(mode: "deny" | "unknown", evidence)."""
     if not policy:
@@ -441,36 +417,6 @@ def effective_mode(policy: dict | None) -> tuple[str, str]:
     if not policy.get("cedarTable"):
         return "unknown", "cedar_policy_rules=absent"
     return "deny", f"engine=cedar; strict_deny={'on' if policy.get('strict') else 'off'}"
-
-
-def permit_labels(policy: dict | None, agent_id: str | None) -> list[str]:
-    """Labels of the enabled permit policies applying to the agent (empty if any enabled policy is unparsed)."""
-    if invalid_policies(policy, agent_id):
-        return []
-    return sorted({rule_label(p) for p in applicable_rules(policy, agent_id) if p["scope"]["effect"] == "permit"})
-
-
-def host_allowed(policy: dict | None, agent_id: str | None, host: str, credentialed: bool = False, method: str | None = None) -> bool | None:
-    """Whether a request to ``host`` passes (None when the policy is unknown).
-
-    Conditional and path-specific policies are treated as applying to the host;
-    a forbid counts only when it is unconditional.
-    """
-    mode, _ = effective_mode(policy)
-    if mode == "unknown":
-        return None
-    rules = applicable_rules(policy, agent_id)
-    if invalid_policies(policy, agent_id):
-        return False
-
-    def hit(p: dict) -> bool:
-        sc = p["scope"]
-        return ((sc["host"] is None or cedar_like(host.lower(), sc["host"]))
-                and (method is None or sc["methods"] is None or method in sc["methods"]))
-
-    if any(p["scope"]["effect"] == "forbid" and not p["scope"]["conditional"] and not p["scope"]["path"] and hit(p) for p in rules):
-        return False
-    return any(p["scope"]["effect"] == "permit" and hit(p) for p in rules)
 
 
 def deny_by_default_problem(policy: dict | None, lockdown_on: bool) -> str | None:

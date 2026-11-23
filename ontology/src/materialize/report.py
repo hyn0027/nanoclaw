@@ -12,6 +12,7 @@ def print_session(snap: Snapshot) -> None:
     f = snap.facts
     sess, group, config, agent = f["session"], f["group"], f["config"], f["onecli_agent"]
     policy = f["gateway_policy"]
+    ignored = (policy or {}).get("ignoredPolicies", [])
     rules = applicable_rules(policy, agent["id"] if agent else None)
     permits = sum(p["scope"]["effect"] == "permit" for p in rules)
     _, evidence = effective_mode(policy)
@@ -25,19 +26,18 @@ def print_session(snap: Snapshot) -> None:
         ("Egress lockdown", "on" if snap.lockdown_on else "off"),
         ("Destination grants", ", ".join(d["local_name"] for d in f["grants"]) or "none"),
         ("Container skills", ", ".join(f["container_skills"]) or "none"),
-        (f"Materialized skills ({f.get('loaded_skills_scope', 'all')})",
-         "\n".join(f"{n}" + (f" (first loaded {f['loaded_skills'][n]['first']} in {f['loaded_skills'][n]['session']})" if n in f.get("loaded_skills", {}) else "")
-                   for n in f.get("materialized_skills", f["container_skills"])) or "none: no skill loaded yet"),
-        ("Skills without ontology", ", ".join(n for n in f["container_skills"] if n not in f.get("skills_with_ontology", f.get("modeled_skills", []))) or "none"),
+        (f"Materialized skills ({f['loaded_skills_scope']})",
+         "\n".join(n + (f" (first loaded {f['loaded_skills'][n]['first']} in {f['loaded_skills'][n]['session']})" if n in f["loaded_skills"] else "")
+                   for n in f["materialized_skills"]) or "none: no skill loaded yet"),
+        ("Skills without ontology", ", ".join(n for n in f["container_skills"] if n not in f["skills_with_ontology"]) or "none"),
         ("MCP servers (third-party)", ", ".join(config.get("mcp_servers") or {}) or "none"),
-        ("MCP servers without ontology", ", ".join(n for n in config.get("mcp_servers") or {} if n not in f.get("modeled_mcp", {})) or "none"),
+        ("MCP servers without ontology", ", ".join(n for n in config.get("mcp_servers") or {} if n not in f["modeled_mcp"]) or "none"),
         ("Gateway identity", agent["identifier"] if agent else "none"),
         ("Granted credentials", ", ".join(f"{s['name']} ({s['hostPattern']})" for s in f["secrets"]) or "none"),
         ("Gateway policy", evidence),
         ("Cedar policies in scope", f"permit={permits}; forbid={len(rules) - permits}"),
-        ("Ignored policy groups", ", ".join(sorted({p["group"] for p in (f["gateway_policy"] or {}).get("ignoredPolicies", [])}))
-         + f" ({', '.join(p['name'] for p in (f['gateway_policy'] or {}).get('ignoredPolicies', []))}; treated as nonexistent)"
-         if (f["gateway_policy"] or {}).get("ignoredPolicies") else "none"),
+        ("Ignored policy groups", ", ".join(sorted({p["group"] for p in ignored}))
+         + f" ({', '.join(p['name'] for p in ignored)}; treated as nonexistent)" if ignored else "none"),
         ("Claude tool lists", f"TOOL_ALLOWLIST={len(f['claude_tools']['allowlist'])}; SDK_DISALLOWED_TOOLS={len(f['claude_tools']['disallowed'])}"),
         ("Instances / triples", f"{len(set(snap.graph.subjects(RDF.type, None)))} / {len(snap.graph)}"),
     ], (26, 90))
@@ -45,8 +45,6 @@ def print_session(snap: Snapshot) -> None:
 
 COLUMNS = ("Resource", "Location", "Effects", "Via", "Status", "Gate")
 WIDTHS = (32, 44, 18, 52, 11, 44)
-
-
 REMOTE_COLUMNS = ("Endpoint", "What can happen there", "Route", "Status", "Gate")
 REMOTE_WIDTHS = (60, 66, 44, 11, 40)
 
@@ -215,7 +213,6 @@ def print_modifications(snap: Snapshot, inside: list[tuple], outside: list[tuple
     texts = {p["name"]: p["text"] for p in policy.get("policies", [])}
     resolver = None
     if snap.instances is not None:
-        from .instances import resolve
         from .instances import targets
 
         def resolver(res: str, effect: str, loc: str) -> list[str] | None:
@@ -243,8 +240,6 @@ def print_findings(snap: Snapshot) -> None:
 
 
 STARTERS_SHOWN = 6
-
-
 DOWNSTREAM_COLUMNS = ("Resource", "Influence", "Path (shortest per effect)", "Started by", "Status", "Where it starts", "Instances (narrowed along the path)")
 
 
@@ -259,8 +254,7 @@ def print_downstream(rows: list[tuple]) -> None:
                 DOWNSTREAM_COLUMNS, shown, (26, 18, 70, 40, 11, 44, 60), record_rows=rows)
 
 
-
-def print_report(snap: Snapshot, inside: list[tuple], outside: list[tuple], remote: list[tuple], downstream: list[tuple] = ()) -> None:
+def print_report(snap: Snapshot, inside: list[tuple], outside: list[tuple], remote: list[tuple], downstream: list[tuple]) -> None:
     """Session header, the three effect tables (native and skill-operation rows), and model/runtime differences.
 
     Everything else (mounts, requirements, tools, capabilities, routes, Cedar
@@ -269,5 +263,5 @@ def print_report(snap: Snapshot, inside: list[tuple], outside: list[tuple], remo
     print_session(snap)
     print_instances(snap)
     print_modifications(snap, inside, outside, remote)
-    print_downstream(list(downstream))
+    print_downstream(downstream)
     print_findings(snap)

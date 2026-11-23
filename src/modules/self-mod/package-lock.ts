@@ -15,10 +15,10 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { DATA_DIR } from '../../config.js';
-import { packageName } from './packages.js';
+import { packageName, type PackageKind } from './packages.js';
 
 const execFileAsync = promisify(execFile);
-export const PACKAGE_LOCK_DIR = path.join(DATA_DIR, 'package-locks');
+const PACKAGE_LOCK_DIR = path.join(DATA_DIR, 'package-locks');
 const HISTORY = 20;
 
 export interface PackageBuildRecord {
@@ -53,8 +53,7 @@ const NPM_PROBE = [
   'console.log(JSON.stringify(out))',
 ].join('');
 
-/** Parse the probe output: dpkg lines, then the npm probe's {name: version} (or a
- *  `pnpm ls -g --json` listing). */
+/** Parse the probe output: dpkg lines, then the npm probe's {name: version}. */
 export function parseInstalled(
   stdout: string,
   apt: string[],
@@ -69,23 +68,15 @@ export function parseInstalled(
   }
   const npmVersions = new Map<string, string>();
   try {
-    const parsed = JSON.parse(npmOut.trim() || '{}') as unknown;
-    if (Array.isArray(parsed)) {
-      for (const entry of parsed as Array<{ dependencies?: Record<string, { version?: string }> }>) {
-        for (const [name, dep] of Object.entries(entry.dependencies ?? {})) {
-          if (dep?.version) npmVersions.set(name, dep.version);
-        }
-      }
-    } else if (parsed && typeof parsed === 'object') {
-      for (const [name, version] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof version === 'string') npmVersions.set(name, version);
-      }
+    const parsed = JSON.parse(npmOut.trim() || '{}') as Record<string, unknown>;
+    for (const [name, version] of Object.entries(parsed ?? {})) {
+      if (typeof version === 'string') npmVersions.set(name, version);
     }
     // eslint-disable-next-line no-catch-all/no-catch-all -- unreadable listing: versions stay null
   } catch {
     /* versions stay null */
   }
-  const pick = (kind: 'apt' | 'npm', specs: string[], found: Map<string, string>) =>
+  const pick = (kind: PackageKind, specs: string[], found: Map<string, string>) =>
     Object.fromEntries(specs.map((s) => [packageName(kind, s), found.get(packageName(kind, s)) ?? null]));
   return { apt: pick('apt', apt, aptVersions), npm: pick('npm', npm, npmVersions) };
 }
@@ -147,9 +138,7 @@ export async function recordInstalledPackages(opts: {
         '-c',
         script,
       ],
-      {
-        timeout: 120_000,
-      },
+      { timeout: 120_000 },
     );
     record.installed = parseInstalled(stdout, apt, npm);
     // eslint-disable-next-line no-catch-all/no-catch-all -- recording must not fail a build that succeeded
@@ -161,7 +150,7 @@ export async function recordInstalledPackages(opts: {
   return record;
 }
 
-export function readLock(agentGroupId: string): PackageLock | null {
+function readLock(agentGroupId: string): PackageLock | null {
   try {
     return JSON.parse(fs.readFileSync(path.join(PACKAGE_LOCK_DIR, `${agentGroupId}.json`), 'utf8')) as PackageLock;
     // eslint-disable-next-line no-catch-all/no-catch-all -- no lock yet

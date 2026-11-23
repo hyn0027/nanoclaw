@@ -54,12 +54,12 @@ function listSessions(): Array<{ group: string; session: string; file: string; m
   return fs
     .readdirSync(ROOT)
     .flatMap((group) =>
-      fs.readdirSync(path.join(ROOT, group)).map((session) => {
-        const file = path.join(ROOT, group, session, 'actions.jsonl');
-        return { group, session, file, mtime: fs.existsSync(file) ? fs.statSync(file).mtime : new Date(0) };
-      }),
+      fs
+        .readdirSync(path.join(ROOT, group))
+        .map((session) => ({ group, session, file: path.join(ROOT, group, session, 'actions.jsonl') }))
+        .filter((s) => fs.existsSync(s.file))
+        .map((s) => ({ ...s, mtime: fs.statSync(s.file).mtime })),
     )
-    .filter((s) => fs.existsSync(s.file))
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 }
 
@@ -109,18 +109,17 @@ function parseGatewayLine(line: string, agentId: string): NetEvent | null {
       injections: mitm[4] ? Number(mitm[4]) : undefined,
     };
   }
-  const err = clean.match(/(WARN|ERROR).*?(?:host=(\S+))?.*?error=(.+)$/);
+  const err = clean.match(/(?:WARN|ERROR).*?error=(.+)$/);
   if (err) {
     const host = clean.match(/host=(\S+?)(?::443)?[\s}"]/)?.[1];
-    return { source: 'network', ts: normalized, host, error: err[3].trim() };
+    return { source: 'network', ts: normalized, host, error: err[1].trim() };
   }
   return null;
 }
 
-function readNetwork(agentId: string, since?: string): NetEvent[] {
+function readNetwork(agentId: string): NetEvent[] {
   try {
-    const argv = ['logs', ...(since ? ['--since', since] : []), GATEWAY];
-    const raw = execFileSync('docker', argv, {
+    const raw = execFileSync('docker', ['logs', GATEWAY], {
       encoding: 'utf8',
       maxBuffer: 512 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -257,7 +256,7 @@ function timeline(entries: Entry[], net: NetEvent[]): Array<{ entry: Entry; chil
     if (best && !isModelCall(n) && !isTelemetry(n)) best.children.push(n);
     else loose.push(n);
   }
-  const rows = [...entries, ...loose]
+  return [...entries, ...loose]
     .sort((a, b) => a.ts.localeCompare(b.ts))
     .map((entry) => ({
       entry,
@@ -266,7 +265,6 @@ function timeline(entries: Entry[], net: NetEvent[]): Array<{ entry: Entry; chil
           ? (windows.get(entry.toolUseId)?.children ?? [])
           : [],
     }));
-  return rows;
 }
 
 function agentLabeler(): (id: unknown) => string {

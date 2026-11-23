@@ -58,7 +58,8 @@ def check_relation_types(combined: Graph, kinds: Kinds) -> None:
         ):
             raise SystemExit(f"Untyped control: {subject} -> {control}")
     for skill, control in combined.subject_objects(AR.subjectToControlKind):
-        if not ({(skill, RDF.type, AR.Skill), (skill, RDF.type, AR.MCPServer)} & set(combined.triples((skill, RDF.type, None)))) or (control, RDF.type, AR.SecurityControlKind) not in combined:
+        is_skill = (skill, RDF.type, AR.Skill) in combined or (skill, RDF.type, AR.MCPServer) in combined
+        if not is_skill or (control, RDF.type, AR.SecurityControlKind) not in combined:
             raise SystemExit(f"Untyped skill control: {skill} -> {control}")
 
 
@@ -86,10 +87,11 @@ def check_mounts_and_sides(combined: Graph, kinds: Kinds) -> None:
 def check_provider_tools(combined: Graph, kinds: Kinds) -> None:
     """Provider tool names, tool requirements, and capability refinements."""
     capabilities = set(combined.subjects(RDF.type, AR.NativeCapability))
-    tool_names = {str(name) for kind, name in combined.subject_objects(AR.providerToolName) if kind in kinds.invocations}
-    for kind, _ in combined.subject_objects(AR.providerToolName):
+    tool_names = set()
+    for kind, name in combined.subject_objects(AR.providerToolName):
         if kind not in kinds.invocations:
             raise SystemExit(f"Provider tool name on a non-invocation kind: {kind}")
+        tool_names.add(str(name))
     for requirement, name in combined.subject_objects(AR.requiresProviderTool):
         if (requirement, RDF.type, AR.Requirement) not in combined or str(name) not in tool_names:
             raise SystemExit(f"Requirement names an unmodeled provider tool: {requirement} -> {name}")

@@ -21,25 +21,24 @@ from .snapshot import Snapshot
 
 def evaluate(snap: Snapshot) -> dict[str, tuple[URIRef, str]]:
     """Requirement local name -> (status, evidence)."""
-    f, config = snap.facts, snap.facts["config"]
+    f = snap.facts
     mounts = {m["Destination"]: bool(m["RW"]) for m in f["inspect"]["Mounts"]}
-    provider = (config.get("provider") or f["session"].get("agent_provider") or "claude").lower()
-    claude = provider == "claude"
+    name = provider(snap)
     extras = [d for d in mounts if d.startswith("/workspace/extra/")]
     origin = bool(f["session"].get("messaging_group_id"))
 
-    def mounted(path: str, what: str) -> tuple[URIRef, str]:
+    def mounted(path: str) -> tuple[URIRef, str]:
         return (SATISFIED if path in mounts else UNSATISFIED), f"mount {path}=" + ("present" if path in mounts else "absent")
 
-    claude_state = claude and "/home/node/.claude" in mounts
+    claude_state = name == "claude" and "/home/node/.claude" in mounts
     any_rw_extra = any(mounts[d] for d in extras)
     onecli_files = any("onecli" in d for d in mounts)
     return {
-        "cond_default_claude_provider": (SATISFIED if claude_state else UNSATISFIED, f"provider={provider}; mount /home/node/.claude={'present' if '/home/node/.claude' in mounts else 'absent'}"),
+        "cond_default_claude_provider": (SATISFIED if claude_state else UNSATISFIED, f"provider={name}; mount /home/node/.claude={'present' if '/home/node/.claude' in mounts else 'absent'}"),
         "cond_builtin_messaging_tool_available": (SATISFIED, "unconditional"),
-        "cond_shared_skills_exist": mounted("/app/skills", "/app/skills"),
-        "cond_container_config_exists": mounted("/workspace/agent/container.json", "container.json"),
-        "cond_standing_instructions_composed": mounted("/workspace/agent/CLAUDE.md", "CLAUDE.md"),
+        "cond_shared_skills_exist": mounted("/app/skills"),
+        "cond_container_config_exists": mounted("/workspace/agent/container.json"),
+        "cond_standing_instructions_composed": mounted("/workspace/agent/CLAUDE.md"),
         "cond_additional_mount_admitted": (SATISFIED if extras else UNSATISFIED, f"extra_mounts={len(extras)}"),
         "cond_additional_mount_readwrite": (SATISFIED if any_rw_extra else UNSATISFIED, f"rw_extra_mounts={sum(mounts[d] for d in extras)}"),
         "cond_onecli_files_contributed": (SATISFIED if onecli_files else UNSATISFIED, f"onecli_mounts={sum('onecli' in d for d in mounts)}"),
@@ -69,14 +68,14 @@ def provider(snap: Snapshot) -> str:
 
 def evaluate_tool_requirements(snap: Snapshot) -> dict[URIRef, tuple[URIRef, str]]:
     """Requirements decided by which provider tools are enabled (from the model)."""
-    lists, out = snap.facts["claude_tools"], {}
-    if provider(snap) != "claude":
+    lists, out, name = snap.facts["claude_tools"], {}, provider(snap)
+    if name != "claude":
         for cond in set(snap.model.subjects(AR.requiresProviderTool, None)) | set(snap.model.subjects(AR.satisfiedByEndpointKind, None)):
-            out[cond] = (UNKNOWN, f"provider={provider(snap)}; modeled=claude")
+            out[cond] = (UNKNOWN, f"provider={name}; modeled=claude")
         return out
-    for cond, name in snap.model.subject_objects(AR.requiresProviderTool):
-        enabled, reason = tool_status(lists, str(name))
-        out[cond] = (SATISFIED if enabled else UNSATISFIED, f"{name}: {reason}")
+    for cond, tool in snap.model.subject_objects(AR.requiresProviderTool):
+        enabled, reason = tool_status(lists, str(tool))
+        out[cond] = (SATISFIED if enabled else UNSATISFIED, f"{tool}: {reason}")
     for cond, endpoint in snap.model.subject_objects(AR.satisfiedByEndpointKind):
         tools = tools_implementing(snap.model, endpoint)
         enabled = [name for _, name in tools if tool_status(lists, name)[0]]

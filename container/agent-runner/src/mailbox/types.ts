@@ -73,8 +73,7 @@ export interface MailboxOperations {
   setContainerToolInFlight(tool: string, declaredTimeoutMs: number | null): void;
   clearContainerToolInFlight(): void;
   clearStaleProcessingAcks(): void;
-  /** Optional: implementations without an action log simply don't record. */
-  appendAction?(action: ActionDraft): void;
+  appendAction(action: ActionDraft): void;
 }
 
 export interface AgentMailbox {

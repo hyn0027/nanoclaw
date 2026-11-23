@@ -5,9 +5,9 @@ three tables. Via is the model's open ``routesToKind`` path from the endpoint to
 the resource's side, one step per line under the tool name
 (steps closed by an observed control are dropped). A path through the OneCLI
 gateway yields one row per Cedar permit policy applying to the agent, located
-at the policy's "<methods> <host><path>"; its gate lists the policy, its
-annotations, overlapping forbids, and granted credentials whose host pattern
-overlaps. Every gate also lists the model's ``protectedByKind`` controls along
+at the policy entry ("cedar: <group>/<policy>"; a configured MCP server by the
+gateway's own decision); its gate lists overlapping forbids and granted
+credentials whose host pattern overlaps. Every gate also lists the model's ``protectedByKind`` controls along
 the path. Reads are included because the remote party sees the request.
 """
 
@@ -60,11 +60,10 @@ def credential_tokens(snap: Snapshot, host: str | None) -> list[str]:
     return [f"credential: {', '.join(hit)}"] if hit else []
 
 
-def host_rows(snap: Snapshot, res: str, effects: str, via: str, status: str, hosts: list[str],
-              entries: list[dict], kinds: list[URIRef], facts: list[str] | None = None) -> list[tuple]:
+def host_permit_rows(snap: Snapshot, res: str, effects: str, via: str, status: str, hosts: list[str],
+              entries: list[dict], kinds: list[URIRef], facts: list[str]) -> list[tuple]:
     """One row per (host, Cedar permit covering it). Hosts no enabled permit covers get no
     row; with no host at all (no granted credential) the row is Unavailable with "credential: none"."""
-    facts = facts or []
     if not hosts:
         return [(res, "-", effects, via, "Unavailable", gate(snap, ["credential: none", *facts], *kinds))]
     rows = []

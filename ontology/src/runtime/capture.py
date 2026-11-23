@@ -36,16 +36,15 @@ def save_cursor(last_id: str) -> None:
     CURSOR.write_text(json.dumps({"last_id": last_id, "updated_at": datetime.now(timezone.utc).isoformat()}) + "\n")
 
 
-def files(capture_dir: Path = CAPTURE_DIR) -> list[Path]:
-    return sorted(capture_dir.glob("[0-9]" * 10 + ".jsonl")) if capture_dir.is_dir() else []
+def files() -> list[Path]:
+    return sorted(CAPTURE_DIR.glob("[0-9]" * 10 + ".jsonl")) if CAPTURE_DIR.is_dir() else []
 
 
-def new_records(after: str, capture_dir: Path = CAPTURE_DIR) -> list[dict]:
+def new_records(after: str) -> list[dict]:
     """Complete lines with an id after ``after``, in id order."""
     out = []
-    for path in files(capture_dir):
-        text = path.read_text(errors="replace")
-        lines = text.split("\n")
+    for path in files():
+        lines = path.read_text(errors="replace").split("\n")
         for line in lines[:-1]:  # the last piece is empty or a line still being written
             if not line.strip():
                 continue
@@ -63,11 +62,11 @@ def is_probe(record: dict) -> bool:
     return any(k.lower() == PROBE_HEADER for k in headers)
 
 
-def prune(last_id: str, capture_dir: Path = CAPTURE_DIR) -> list[str]:
+def prune(last_id: str) -> list[str]:
     """Delete hour files that are over and fully routed. Returns their names."""
     current_hour = datetime.now(timezone.utc).strftime("%Y%m%d%H")
     removed = []
-    for path in files(capture_dir):
+    for path in files():
         if path.stem >= current_hour:
             continue
         ids = []

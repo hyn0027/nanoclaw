@@ -55,7 +55,7 @@ class SessionOntology:
         if self.state_path.exists():
             return json.loads(self.state_path.read_text())
         return {
-            "ontology_id": f"ont-{self.session_id}",
+            "ontology_id": self.ontology_id,
             "session_id": self.session_id,
             "agent_group_id": self.group_id,
             "created_at": now(),
@@ -110,7 +110,7 @@ class SessionOntology:
     def next_expansion_id(self) -> str:
         return f"{self.ontology_id}/{len(self.state['expansions']) + 1:04d}"
 
-    def add_expansion(self, expansion_id: str, graph: Graph, entry: dict) -> Path:
+    def add_expansion(self, expansion_id: str, graph: Graph, entry: dict) -> None:
         self.expansions_dir.mkdir(parents=True, exist_ok=True)
         number = expansion_id.rsplit("/", 1)[1]
         path = self.expansions_dir / f"{number}.trig"
@@ -125,14 +125,17 @@ class SessionOntology:
         self.state["expansions"].append({**entry, "id": expansion_id, "file": f"expansions/{path.name}"})
         self.state["head"] = expansion_id
         self.write_view()
-        return path
+
+    def read_expansion(self, entry: dict) -> list[Graph]:
+        """The named graph(s) of one expansion (a state["expansions"] entry)."""
+        return list(Dataset().parse(self.dir / entry["file"], format="trig").graphs())
 
     def expansion_graph(self) -> Graph:
         """Every expansion, merged, plus the runtime vocabulary."""
         merged = Graph()
         merged.parse(RUNTIME_VOCABULARY, format="turtle")
         for e in self.state["expansions"]:
-            for g in Dataset().parse(self.dir / e["file"], format="trig").graphs():
+            for g in self.read_expansion(e):
                 merged += g
         return merged
 
@@ -141,7 +144,6 @@ class SessionOntology:
         g.bind("ar", AR)
         g.bind("rt", RT)
         write_atomic(self.dir / "ontology.trig", g.serialize(format="turtle"))
-
 
 
 def graph_uri(expansion_id: str) -> URIRef:

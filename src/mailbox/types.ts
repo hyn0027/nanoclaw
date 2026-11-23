@@ -153,8 +153,8 @@ export interface InboundMailbox {
   getInboundHistory(limit: number): MailboxHistoryMessage[];
   getConversationRoot(): MailboxTimelineMessage | undefined;
   findTaskBySeriesSlug(slug: string): TaskRecord | undefined;
-  /** Optional (action-log export): inbound rows with seq > afterSeq, ascending. */
-  getInboundAfterSeq?(afterSeq: number, limit: number): MailboxActivityMessage[];
+  /** Action-log export: inbound rows with seq > afterSeq, ascending. */
+  getInboundAfterSeq(afterSeq: number, limit: number): MailboxActivityMessage[];
 }
 
 /** Host-visible outbound mailbox behavior. Storage layout and lifecycle are implementation-private. */
@@ -167,10 +167,10 @@ export interface OutboundMailbox {
   writeDirect(message: DirectOutboundMessage): Promise<void>;
   getOutboundHistory(limit: number): MailboxHistoryMessage[];
   getTopLevelOutbound(limit: number): MailboxTimelineMessage[];
-  /** Optional (action-log export): outbound rows with seq > afterSeq, ascending. */
-  getOutboundAfterSeq?(afterSeq: number, limit: number): MailboxActivityMessage[];
-  /** Optional (action-log export): action_log rows with id > afterId, ascending; [] on pre-action-log DBs. */
-  getActionsAfter?(afterId: number, limit: number): MailboxActionRow[];
+  /** Action-log export: outbound rows with seq > afterSeq, ascending. */
+  getOutboundAfterSeq(afterSeq: number, limit: number): MailboxActivityMessage[];
+  /** Action-log export: action_log rows with id > afterId, ascending; [] on pre-action-log DBs. */
+  getActionsAfter(afterId: number, limit: number): MailboxActionRow[];
 }
 
 export interface MailboxSession extends InboundMailbox, OutboundMailbox {}

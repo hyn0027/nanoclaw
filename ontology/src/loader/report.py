@@ -16,8 +16,8 @@ def print_summary(inv: Inventory) -> None:
         ("Metric", "Value"),
         [
             ("Loaded skills", ", ".join(sorted(inv.skills)) or "(none)"),
-            ("Operations", str(len(inv.operations))),
-            ("Potential effect/resource rows", str(len(inv.effect_rows))),
+            ("Operations", str(len({operation for _, operation, _ in inv.operation_rows}))),
+            ("Potential effect/resource rows", str(inv.effect_count)),
             ("Native endpoint capabilities", str(len(inv.native))),
             ("Potential Internet calls", str(len(inv.calls))),
         ],
@@ -169,18 +169,18 @@ def print_affected_resources(inv: Inventory, combined: Graph) -> None:
     )
 
 
-def print_internet_calls(inv: Inventory) -> None:
+def print_internet_calls(inv: Inventory, combined: Graph) -> None:
     if not inv.calls:
         return
     rows = []
-    for skill, operation, call, graph in inv.calls:
+    for skill, operation, call in inv.calls:
         key = f"{skill} / {label(operation)}"
-        vias = names(set(graph.objects(call, AR.callViaKind)))
-        conditions = set(graph.objects(operation, AR.requires)) | set(graph.objects(call, AR.callConditionalOn))
-        stage = label(graph.value(call, AR.callStage))
-        initiator = label(graph.value(call, AR.callInitiatorKind))
-        endpoint = label(graph.value(call, AR.callEndpointKind))
-        pattern = graph.value(call, AR.callEndpointPattern) or "(not established)"
+        vias = names(set(combined.objects(call, AR.callViaKind)))
+        conditions = set(combined.objects(operation, AR.requires)) | set(combined.objects(call, AR.callConditionalOn))
+        stage = label(combined.value(call, AR.callStage))
+        initiator = label(combined.value(call, AR.callInitiatorKind))
+        endpoint = label(combined.value(call, AR.callEndpointKind))
+        pattern = combined.value(call, AR.callEndpointPattern) or "(not established)"
         rows.extend(
             [
                 (key, "Call", label(call)),
@@ -206,4 +206,4 @@ def print_report(inv: Inventory, catalog: Catalog, combined: Graph) -> None:
     print_native_capabilities(inv, combined)
     print_mounts(combined)
     print_affected_resources(inv, combined)
-    print_internet_calls(inv)
+    print_internet_calls(inv, combined)

@@ -6,9 +6,8 @@ and follows the environment graph, up to MAX_STEPS steps:
 - triggers: ar:mayTrigger on the kind (or a kind it specializes) whose
   ar:onEffectType is the effect: the environment itself causes ar:effectType on
   ar:affectsKind (e.g. a created commit starts a workflow run);
-- containment down: Delete on a kind deletes the kinds it contains, and so on;
-- no containment up: a kind is not affected only because something it contains is
-  (a new issue does not count as an effect on its repository);
+- containment down: Delete on a kind deletes the kinds it contains, and so on
+  (never up: a new issue is not an effect on its repository);
 - references (on Delete, final): deleting a kind affects the kinds that refer to
   it (ar:referencesKind and its sub-properties), e.g. a deleted label or branch
   leaves dangling references in issues or pull requests.
@@ -22,6 +21,7 @@ that start it. All of it is read from the model; nothing is inferred elsewhere.
 """
 
 from rdflib import URIRef
+from rdflib.namespace import RDFS
 
 from ..common.namespaces import AR
 from ..common.rdf import short
@@ -29,16 +29,15 @@ from .modifications.common import ancestors
 from .snapshot import Snapshot
 
 MAX_STEPS = 4
-CHANGES = {"Create", "Update", "Delete", "Execute", "Delegate", "Configure", "Install"}
 # Effects a downstream path starts from: changes, and reads (what the agent can take in is an
 # effect on that instance too). A read only propagates where the model says something reacts
-# to it (ar:mayTrigger with ar:onEffectType ar:Read); containment updates follow changes only.
-STARTS = CHANGES | {"Read"}
+# to it (ar:mayTrigger with ar:onEffectType ar:Read).
+STARTS = {"Create", "Update", "Delete", "Execute", "Delegate", "Configure", "Install", "Read"}
 REFERENCE_PROPS = (AR.referencesKind, AR.authoredByKind, AR.assignedToKind)
 
 
 def starts(rows: list[tuple]) -> list[tuple[URIRef, str, str, str, str, str]]:
-    """(kind, effect, starter label, Cedar entry, status, location) for each changing effect of the remote rows."""
+    """(kind, effect, starter label, Cedar entry, status, location) for each starting effect of the remote rows."""
     out = []
     for res, loc, effects, via, status, _gate in rows:
         kind = AR[res.strip(" └")]
@@ -62,7 +61,7 @@ def steps(snap: Snapshot, kind: URIRef, effect: str) -> list[tuple[URIRef, str, 
             on = m.value(node, AR.onEffectType)
             target, eff = m.value(node, AR.affectsKind), m.value(node, AR.effectType)
             if on is not None and short(on) == effect and target is not None and eff is not None:
-                note = m.value(node, URIRef("http://www.w3.org/2000/01/rdf-schema#comment"))
+                note = m.value(node, RDFS.comment)
                 event, handler = m.value(node, AR.triggerEvent), m.value(node, AR.triggerHandlerKind)
                 out.append((target, short(eff), f"triggers{f' ({note})' if note else ''}", False,
                             (str(event), short(handler)) if event is not None and handler is not None else None))
@@ -148,8 +147,7 @@ def assess_downstream(snap: Snapshot, rows: list[tuple]) -> tuple[list[tuple], l
     for kind in sorted({k for k, _ in best}, key=lambda k: (-len([1 for kk, _ in best if kk == k]), short(k))):
         effects = sorted(e for k, e in best if k == kind)
         paths = "\n".join("\n".join(best[(kind, e)]) for e in effects)
-        who = sorted(starters[kind])
-        started = "\n".join(who)
+        started = "\n".join(sorted(starters[kind]))
         instances = []
         for e in effects:
             direct = len(best[(kind, e)]) == 1  # the agent's own effect; later steps are reactions

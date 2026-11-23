@@ -25,7 +25,10 @@ def claude_bin() -> str:
     return found
 
 
-def call(system: str, prompt: str, schema: dict, model: str | None = None, timeout: int = 1200) -> tuple[dict, dict]:
+TIMEOUT_S = 1200
+
+
+def call(system: str, prompt: str, schema: dict, model: str | None = None) -> tuple[dict, dict]:
     """(structured output, usage metadata)."""
     cwd = RUNTIME_DIR / "llm-cwd"
     cwd.mkdir(parents=True, exist_ok=True)
@@ -36,9 +39,9 @@ def call(system: str, prompt: str, schema: dict, model: str | None = None, timeo
     if model:
         argv += ["--model", model]
     try:
-        done = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        done = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=TIMEOUT_S, cwd=cwd)
     except subprocess.TimeoutExpired as e:
-        raise LLMError(f"claude -p timed out after {timeout}s") from e
+        raise LLMError(f"claude -p timed out after {TIMEOUT_S}s") from e
     try:
         out = json.loads(done.stdout)
     except ValueError as e:

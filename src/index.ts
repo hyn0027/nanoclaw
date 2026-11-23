@@ -17,7 +17,6 @@ import { startHostSweep, stopHostSweep } from './host-sweep.js';
 import { startHostModules, stopHostModules } from './host-lifecycle.js';
 import { routeInbound } from './router.js';
 import { log } from './log.js';
-import { enforceUpgradeTripwire } from './upgrade-state.js';
 
 // Response registry lives in response-registry.ts to break the
 // circular import cycle: src/index.ts imports src/modules/index.js for side
@@ -66,10 +65,8 @@ async function main(): Promise<void> {
   // 0. Circuit breaker — backoff on rapid restarts
   await enforceStartupBackoff();
 
-  // 0.5 Upgrade tripwire — disabled in this local checkout: it runs whatever
-  // code is checked out (local commits included) instead of refusing to start
-  // when the upgrade marker does not match. Re-enable with enforceUpgradeTripwire().
-  void enforceUpgradeTripwire;
+  // 0.5 Upgrade tripwire — disabled in this local checkout, so local commits run
+  // as is. Re-enable with enforceUpgradeTripwire() from ./upgrade-state.js.
   log.warn('Upgrade tripwire disabled (local checkout); running the checked-out code as is');
 
   // 1. Init central DB

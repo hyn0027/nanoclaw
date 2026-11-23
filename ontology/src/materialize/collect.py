@@ -4,12 +4,11 @@ Names and settings only: secret values, tokens, and environment values are
 never read.
 """
 
-import subprocess
 from pathlib import Path
 
 from .gateway_policy import granted_secrets, read_gateway_policy
 from .provider_tools import read_tool_lists
-from .runtime import docker_json, ncl, run, sqlite_rows, tool
+from .runtime import container_command, docker_json, ncl, run, sqlite_rows, tool
 
 
 def pick_session(sessions: list[dict], session_id: str | None) -> dict:
@@ -43,11 +42,7 @@ def collect_container(session_id: str) -> dict:
             "internal": bool(net.get("Internal")),
             "members": sorted(c["Name"] for c in net.get("Containers", {}).values()),
         }
-    try:
-        curl = run([tool("docker"), "exec", container_name, "sh", "-c", "command -v curl || true"]).strip()
-    except subprocess.CalledProcessError:
-        curl = ""
-    return {"container_name": container_name, "inspect": inspect, "networks": networks, "curl": curl}
+    return {"container_name": container_name, "inspect": inspect, "networks": networks, "curl": container_command(container_name, "curl")}
 
 
 def collect_gateway(group_id: str) -> dict:

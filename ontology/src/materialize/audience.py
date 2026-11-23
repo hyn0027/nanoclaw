@@ -15,26 +15,26 @@ from .snapshot import Snapshot
 
 def _user(snap: Snapshot, user_id: str) -> str:
     f = snap.facts
-    user = next((u for u in f.get("users", []) if u["id"] == user_id), None)
+    user = next((u for u in f["users"] if u["id"] == user_id), None)
     name = (user or {}).get("display_name") or user_id
-    group_names = {g["id"]: g["name"] for g in f.get("all_groups", [])}
+    group_names = {g["id"]: g["name"] for g in f["all_groups"]}
     roles = [r["role"] + (f" of {group_names.get(r['agent_group_id'], r['agent_group_id'])}" if r.get("agent_group_id") else "")
-             for r in f.get("roles", []) if r["user_id"] == user_id]
-    member = [group_names.get(m["agent_group_id"], m["agent_group_id"]) for m in f.get("all_members", []) if m["user_id"] == user_id]
+             for r in f["roles"] if r["user_id"] == user_id]
+    member = [group_names.get(m["agent_group_id"], m["agent_group_id"]) for m in f["all_members"] if m["user_id"] == user_id]
     tags = roles + ([f"member of {', '.join(sorted(member))}"] if member else [])
     return f"{name} ({user_id})" + (f": {'; '.join(tags)}" if tags else "")
 
 
 def chat_lines(snap: Snapshot, messaging_group_id: str) -> list[str]:
     """The chat and the people in it, as far as NanoClaw records them."""
-    mg = next((g for g in snap.facts.get("messaging_groups", []) if g["id"] == messaging_group_id), None)
+    mg = next((g for g in snap.facts["messaging_groups"] if g["id"] == messaging_group_id), None)
     if mg is None:
         return [f"chat: {messaging_group_id} (not found)"]
-    dm_users = [d["user_id"] for d in snap.facts.get("user_dms", []) if d["messaging_group_id"] == messaging_group_id]
+    dm_users = [d["user_id"] for d in snap.facts["user_dms"] if d["messaging_group_id"] == messaging_group_id]
     if not mg.get("is_group") and not dm_users:
         # A local channel's chat is its user: user id "<channel>:<platform id>" (e.g. cli:local).
         own = f"{mg['channel_type']}:{mg['platform_id']}"
-        dm_users = [u["id"] for u in snap.facts.get("users", []) if u["id"] == own]
+        dm_users = [u["id"] for u in snap.facts["users"] if u["id"] == own]
     if not mg.get("is_group"):
         lines = [f"DM {mg['platform_id']}"]
         if dm_users:
@@ -54,13 +54,13 @@ def destination_lines(snap: Snapshot, dest: dict) -> list[str]:
     if dest["target_type"] == "channel":
         return chat_lines(snap, dest["target_id"])
     f = snap.facts
-    group = next((g for g in f.get("all_groups", []) if g["id"] == dest["target_id"]), None)
+    group = next((g for g in f["all_groups"] if g["id"] == dest["target_id"]), None)
     lines = [f"agent group {group['name'] if group else dest['target_id']} ({dest['target_id']})"]
-    for w in (w for w in f.get("all_wirings", []) if w["agent_group_id"] == dest["target_id"]):
-        mg = next((g for g in f.get("messaging_groups", []) if g["id"] == w["messaging_group_id"]), {})
+    for w in (w for w in f["all_wirings"] if w["agent_group_id"] == dest["target_id"]):
+        mg = next((g for g in f["messaging_groups"] if g["id"] == w["messaging_group_id"]), {})
         lines.append(f"its chat: {mg.get('channel_type', '?')} {mg.get('name') or mg.get('platform_id') or w['messaging_group_id']}")
         lines += [f"  {line}" for line in chat_lines(snap, w["messaging_group_id"])[1:]]
-    lines += [f"its member: {_user(snap, m['user_id'])}" for m in f.get("all_members", []) if m["agent_group_id"] == dest["target_id"]]
+    lines += [f"its member: {_user(snap, m['user_id'])}" for m in f["all_members"] if m["agent_group_id"] == dest["target_id"]]
     return lines
 
 

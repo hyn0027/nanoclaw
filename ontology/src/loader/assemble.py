@@ -13,20 +13,25 @@ from ..common.rdf import required_literal
 from .catalog import Catalog, CatalogEntry
 
 
+def repo_path(value: str) -> Path:
+    """A source path as recorded in a graph: absolute, or relative to the repository."""
+    path = Path(value)
+    return path if path.is_absolute() else ROOT / path
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def check_skill_source(ontology_id: str, entry: CatalogEntry) -> None:
-    """A skill graph pins its SKILL.md (an MCP server graph its snapshot) by hash; a
-    changed source means re-review. A relative source path is relative to the repository."""
+    """A skill graph pins its SKILL.md (an MCP server graph its snapshot and entity
+    mapping) by hash; a changed source means re-review."""
     graph, node = entry["graph"], entry["node"]
-    source = Path(required_literal(graph, node, AR.sourcePath))
-    source = source if source.is_absolute() else ROOT / source
-    expected_hash = required_literal(graph, node, AR.sourceSha256)
-    if hashlib.sha256(source.read_bytes()).hexdigest() != expected_hash:
+    if sha256(repo_path(required_literal(graph, node, AR.sourcePath))) != required_literal(graph, node, AR.sourceSha256):
         raise SystemExit(f"Ontology for {ontology_id} is stale: source skill changed")
     mapping = graph.value(node, AR.entityMappingPath)
-    if mapping is not None:
-        mapping_path = Path(str(mapping)) if Path(str(mapping)).is_absolute() else ROOT / str(mapping)
-        if hashlib.sha256(mapping_path.read_bytes()).hexdigest() != str(graph.value(node, AR.entityMappingSha256)):
-            raise SystemExit(f"Ontology for {ontology_id} is stale: entity mapping changed; rerun generate_mcp_ontology.py")
+    if mapping is not None and sha256(repo_path(str(mapping))) != str(graph.value(node, AR.entityMappingSha256)):
+        raise SystemExit(f"Ontology for {ontology_id} is stale: entity mapping changed; rerun generate_mcp_ontology.py")
 
 
 def check_module(ontology_id: str, entry: CatalogEntry) -> None:

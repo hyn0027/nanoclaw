@@ -3,6 +3,7 @@ import { query as sdkQuery, type HookCallback, type PreCompactHookInput } from '
 import { recordAction } from '../db/action-log.js';
 import { clearContainerToolInFlight, setContainerToolInFlight } from '../db/container-state.js';
 import type { MemorySessionHookRegistration } from '../memory/session-hook.js';
+import { notifyTurnEnd, skillOfToolCall, syncBeforeSkill } from '../ontology-gate.js';
 import type { ResolvedRuntimeConfiguration } from '../provider-contracts/registry.js';
 // The execution-policy, inference, MCP, and memory derivations live in
 // claude-config.ts. The runtime contract (provider-contracts/claude.ts)
@@ -21,7 +22,6 @@ import {
 import { archiveClaudeTranscript, rotateClaudeContinuation } from './claude-history.js';
 import { registerProvider } from './provider-registry.js';
 import type { AgentProvider, AgentQuery, ProviderEvent, ProviderOptions, QueryInput } from './types.js';
-import { notifyTurnEnd, skillOfToolCall, syncBeforeSkill } from '../ontology-gate.js';
 
 function log(msg: string): void {
   console.error(`[claude-provider] ${msg}`);
@@ -418,8 +418,10 @@ export class ClaudeProvider implements AgentProvider {
           // (e.g. a non-retryable 403 billing_error) carry their message in
           // `errors[]` instead. Keep that actionable notice separate from
           // model output so the poll-loop can deliver it without scratchpad.
-          const m = message as { result?: string; is_error?: boolean; errors?: string[] };
-          const r = message as {
+          const m = message as {
+            result?: string;
+            is_error?: boolean;
+            errors?: string[];
             subtype?: string;
             duration_ms?: number;
             num_turns?: number;
@@ -430,13 +432,13 @@ export class ClaudeProvider implements AgentProvider {
           recordAction({
             event: 'turn_end',
             data: {
-              subtype: r.subtype,
+              subtype: m.subtype,
               isError: m.is_error === true,
               errors: m.errors,
-              durationMs: r.duration_ms,
-              numTurns: r.num_turns,
-              costUsd: r.total_cost_usd,
-              usage: r.usage,
+              durationMs: m.duration_ms,
+              numTurns: m.num_turns,
+              costUsd: m.total_cost_usd,
+              usage: m.usage,
             },
           });
           yield {

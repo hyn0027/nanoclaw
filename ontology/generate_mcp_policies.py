@@ -16,9 +16,10 @@ tool can be switched on or off on its own.
 - stream-and-session: GET and DELETE on the endpoint (streamable HTTP)
 - tool-<name>: tools/call with params.name == <name>. Without --enable, read-only
   tools (readOnlyHint) are on and the others off; with --enable, exactly the listed
-  tools are on (and read-content only when listed). Non-read-only tools carry @approval when destructive under the MCP
-  ToolAnnotations defaults (destructiveHint unset counts as true), so an enabled
-  write tool still holds each call for a human.
+  tools are on (and read-content only when listed); --all-on turns every policy on.
+  Non-read-only tools carry @approval when destructive under the MCP ToolAnnotations
+  defaults (destructiveHint unset counts as true), so an enabled write tool still
+  holds each call for a human; --no-approval drops @approval.
 """
 
 import json
@@ -62,9 +63,8 @@ def tool_policy(host: str, path_pattern: str, tool: str, approval: bool) -> str:
 }};'''
 
 
-def describe(tool: dict) -> str:
-    a = tool["annotations"]
-    kind = "read-only" if a.get("readOnlyHint") else ("destructive" if a.get("destructiveHint", True) else "additive write")
+def describe(tool: dict, read_only: bool, destructive: bool) -> str:
+    kind = "read-only" if read_only else "destructive" if destructive else "additive write"
     sets = ", ".join(tool["toolsets"]) or "no documented toolset"
     title = tool.get("title") or tool["name"]
     return f"{title} ({kind}; toolset {sets})"[:500]
@@ -78,7 +78,7 @@ def generate(server_id: str, enable: set[str] | None = None, approval: bool = Tr
         sys.exit(f"unknown tools for --enable: {', '.join(unknown)}")
     url = urlparse(snap["callEndpoint"])
     host = url.hostname
-    path_pattern = (url.path.rstrip("/") or "") + "*"
+    path_pattern = url.path.rstrip("/") + "*"
     caps = snap.get("capabilities") or {}
     title = snap["server"].get("title") or snap["server"]["name"]
 
@@ -113,7 +113,7 @@ def generate(server_id: str, enable: set[str] | None = None, approval: bool = Tr
         destructive = not read_only and bool(a.get("destructiveHint", True))
         policies.append({
             "name": f"tool-{tool['name']}",
-            "description": describe(tool),
+            "description": describe(tool, read_only, destructive),
             "enabled": all_on or ((tool["name"] in enable) if enable is not None else read_only),
             "policyText": tool_policy(host, path_pattern, tool["name"], approval=approval and destructive),
         })
@@ -129,6 +129,8 @@ def generate(server_id: str, enable: set[str] | None = None, approval: bool = Tr
 
 def main() -> None:
     args = sys.argv[1:]
+    if {"-h", "--help"} & set(args):
+        sys.exit(__doc__)
     enable = None
     approval = "--no-approval" not in args
     all_on = "--all-on" in args
@@ -138,7 +140,7 @@ def main() -> None:
         enable = {t.strip() for t in args[i + 1].split(",") if t.strip()} if i + 1 < len(args) else set()
         args = args[:i] + args[i + 2:]
     if len(args) != 1:
-        sys.exit("usage: python3 generate_mcp_policies.py <server-id> [--enable tool,tool,...]  > spec.json")
+        sys.exit("usage: python3 generate_mcp_policies.py <server-id> [--enable tool,tool,...] [--all-on] [--no-approval] > spec.json")
     json.dump(generate(args[0], enable, approval, all_on), sys.stdout, indent=2)
     sys.stdout.write("\n")
 

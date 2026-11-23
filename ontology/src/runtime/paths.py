@@ -11,11 +11,10 @@ CENTRAL_DB = DATA / "v2.db"
 SESSIONS = DATA / "v2-sessions"
 # Where the OneCLI gateway writes captured calls (mounted into it at /capture).
 CAPTURE_DIR = Path(os.environ.get("NANOCLAW_CAPTURE_DIR", DATA / "onecli-capture"))
-# Runtime-wide state: the capture cursor and the run lock.
+# Runtime-wide state: capture cursor, locks, questions/answers, policy templates.
 RUNTIME_DIR = DATA / "ontology-runtime"
 RUNTIME_VOCABULARY = ONTOLOGY_DIR / "runtime" / "vocabulary.ttl"
 SKILLS_SRC = NANOCLAW / "container" / "skills"
-LOG_DIR = NANOCLAW / "logs" / "ontology-runtime"
 
 
 def session_dir(group_id: str, session_id: str) -> Path:

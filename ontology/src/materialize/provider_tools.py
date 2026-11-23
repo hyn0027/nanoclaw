@@ -38,11 +38,6 @@ def tool_status(lists: dict[str, list[str]], name: str) -> tuple[bool, str]:
     return False, "absent from TOOL_ALLOWLIST"
 
 
-def tool_name(model: Graph, kind: URIRef) -> str | None:
-    value = model.value(kind, AR.providerToolName)
-    return str(value) if value is not None else None
-
-
 def provider_tools(model: Graph) -> list[tuple[URIRef, str]]:
     """(tool kind, provider tool name) for every modeled provider tool."""
     return sorted(((k, str(n)) for k, n in model.subject_objects(AR.providerToolName)), key=lambda kn: kn[1])

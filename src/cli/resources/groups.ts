@@ -340,7 +340,7 @@ registerResource({
             };
           }
           const record = await buildAgentGroupImage(id);
-          installed = record ? describeInstalled(record) : '';
+          installed = record ? describeInstalled(record) : ''; // test doubles resolve undefined
         }
         const message = args.message as string | undefined;
 

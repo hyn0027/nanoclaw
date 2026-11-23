@@ -20,7 +20,7 @@ rt:ontologyId a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string 
   rdfs:comment "The session ontology this expansion belongs to (ont-<session id>)." .
 rt:previousExpansion a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string .
 rt:trigger a rdf:Property ; rdfs:domain rt:Expansion ; rdfs:range xsd:string ;
-  rdfs:comment "What set the expansion off: traffic, skill:<name>, mcp:<name>, package:<manager>:<name>." .
+  rdfs:comment "What set the expansion off: traffic, skill:<name>, or package:<manager>:<name>." .
 rt:fromCall a rdf:Property ; rdfs:range xsd:string ;
   rdfs:comment "Id of a gateway-captured call (OneCLI GATEWAY_CAPTURE_DIR record) that is evidence for the subject." .
 rt:createdAt a rdf:Property ; rdfs:range xsd:dateTime .

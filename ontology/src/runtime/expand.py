@@ -17,16 +17,18 @@ import json
 import re
 
 from rdflib import BNode, Graph, Literal, URIRef
-from rdflib.namespace import OWL, RDF, RDFS, XSD
+from rdflib.namespace import OWL, RDF, RDFS
 
 from ..common.namespaces import AR
 from ..common.rdf import short
+from .paths import SKILLS_SRC
 from .store import RT
 
 EFFECT_TYPES = ["Read", "Create", "Update", "Delete", "Transmit", "Execute", "Configure", "Authenticate", "Install", "Delegate", "Validate", "Notify"]
 KIND_NAME = re.compile(r"^[A-Z][A-Za-z0-9]{2,80}$")
 CALL_BODY_CHARS = 16000
 BATCH_CHARS = 220000
+SKILL_SOURCE_CHARS = 60000
 
 _strs = {"type": "array", "items": {"type": "string"}}
 SCHEMA = {
@@ -217,6 +219,25 @@ def batches(records: list[dict]) -> list[tuple[list[dict], str, set[str]]]:
     if current:
         out.append((current, "\n\n".join(text), covered))
     return out
+
+
+def skill_evidence(name: str) -> str:
+    """SKILL.md plus the skill's other text files, up to a budget."""
+    root = SKILLS_SRC / name
+    parts, size = [], 0
+    for path in [root / "SKILL.md", *sorted(p for p in root.rglob("*") if p.is_file() and p.name != "SKILL.md")]:
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            parts.append(f"## {path.relative_to(root)} (binary, not shown)")
+            continue
+        block = f"## {path.relative_to(root)}\n{text}"
+        if size + len(block) > SKILL_SOURCE_CHARS:
+            parts.append(f"## {path.relative_to(root)} ({len(text)} chars, not shown: budget)")
+            continue
+        parts.append(block)
+        size += len(block)
+    return "\n\n".join(parts)
 
 
 def prompt(model: Graph, expansions: Graph, session_id: str, evidence_title: str, evidence: str, context: str) -> str:
@@ -424,12 +445,11 @@ def to_graph(proposal: dict, model: Graph, expansions: Graph, *, session_id: str
         cite(node, c.get("evidence", []))
         counts["correspondences"] += 1
 
-    # the expansion's own provenance node
+    # the expansion's own provenance node (the caller adds trigger, time, model)
     node = URIRef(f"urn:nanoclaw:ontology:{expansion_id}#expansion")
     g.add((node, RDF.type, RT.Expansion))
     g.add((node, RT.expansionId, exp))
     g.add((node, RT.summary, Literal(proposal.get("summary", ""))))
     for cid in sorted(call_ids):
         g.add((node, RT.fromCall, Literal(cid)))
-    _ = XSD  # typed literals are added by the caller (createdAt)
     return g, rejected, counts

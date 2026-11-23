@@ -34,28 +34,33 @@ def read_manifest() -> list[str]:
     return manifest
 
 
+# Each catalogued graph has one node of these types; its ID is read from the paired property.
+ID_PROPERTIES = {
+    AR.OntologyModule: AR.ontologyModuleId,
+    AR.Skill: AR.skillDirectory,
+    AR.MCPServer: AR.mcpServerId,
+}
+
+
 def discover_catalog() -> Catalog:
     """Discover every graph once, keyed by its module ID, skill directory, or MCP server ID.
 
     A support graph under skills/ is still a module when its RDF metadata says
-    ar:OntologyModule. MCP server graphs (ontology/mcp/) declare operations like
-    skills and are catalogued as such.
+    ar:OntologyModule. MCP server graphs declare operations like skills and are
+    catalogued as such.
     """
     catalog: Catalog = {}
-    paths = [p for d in MODEL_DIRS for p in sorted(d.glob("*.trig"))] + sorted(SKILLS_DIR.glob("*.trig")) + sorted(MCP_DIR.glob("*.trig"))
+    paths = [p for d in (*MODEL_DIRS, SKILLS_DIR, MCP_DIR) for p in sorted(d.glob("*.trig"))]
     for path in paths:
         graph = parse_graph(path)
-        nodes = [(node, False) for node in graph.subjects(RDF.type, AR.OntologyModule)]
-        nodes += [(node, True) for node in graph.subjects(RDF.type, AR.Skill)]
-        nodes += [(node, True) for node in graph.subjects(RDF.type, AR.MCPServer)]
+        nodes = [(node, kind) for kind in ID_PROPERTIES for node in graph.subjects(RDF.type, kind)]
         if len(nodes) != 1:
             raise SystemExit(f"Expected one module or skill in {path.relative_to(ROOT)}")
-        node, is_skill = nodes[0]
-        key = (AR.mcpServerId if (node, RDF.type, AR.MCPServer) in graph else AR.skillDirectory) if is_skill else AR.ontologyModuleId
-        ontology_id = required_literal(graph, node, key)
+        node, kind = nodes[0]
+        ontology_id = required_literal(graph, node, ID_PROPERTIES[kind])
         if ontology_id in catalog:
             raise SystemExit(f"Duplicate ontology ID: {ontology_id}")
-        catalog[ontology_id] = {"graph": graph, "node": node, "skill": is_skill}
+        catalog[ontology_id] = {"graph": graph, "node": node, "skill": kind != AR.OntologyModule}
     return catalog
 
 

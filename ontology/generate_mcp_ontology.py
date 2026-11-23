@@ -53,11 +53,12 @@ def local(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", name)
 
 
-def first_sentence(text: str, limit: int = 240) -> str:
+def first_sentence(text: str) -> str:
+    """A tool description's first sentence, at most 240 characters."""
     text = " ".join(text.split())
     match = re.match(r"(.+?[.!?])(\s|$)", text)
     sentence = match.group(1) if match else text
-    return sentence if len(sentence) <= limit else sentence[: limit - 1] + "…"
+    return sentence if len(sentence) <= 240 else sentence[:239] + "…"
 
 
 def effects(annotations: dict) -> list[str]:
@@ -84,7 +85,10 @@ def generate(server_id: str) -> str:
 
     tool_kind = f"ar:{prefix}MCPTool"
     endpoint_kind = f"ar:{prefix}MCPEndpoint"
-    data_kind = lambda toolset: f"ar:{prefix}{camel(toolset)}Data"  # noqa: E731
+
+    def data_kind(toolset: str) -> str:
+        return f"ar:{prefix}{camel(toolset)}Data"
+
     fallback_kind = f"ar:{prefix}Data"
     cond = f"ar:cond_mcp_{sid}_credential"
 
@@ -157,8 +161,7 @@ def generate(server_id: str) -> str:
             effect_nodes = []
             for entry in entries:
                 effs = sorted(set(entry["effects"]) | (set() if read_only else {"Transmit"}))
-                methods = entry.get("methods") or [None]
-                for method in methods:
+                for method in entry.get("methods") or [None]:
                     tag = f" ; ar:mcpToolMethod {lit(method)}" if method else ""
                     effect_nodes += [f"[ a ar:PotentialEffect ; ar:effectType ar:{eff} ; ar:affectsKind ar:{k}{tag} ]" for k in entry["kinds"] for eff in effs]
             status = "ar:MCPToolSchema"
@@ -172,10 +175,10 @@ def generate(server_id: str) -> str:
         out += [
             f"  {op} a ar:Operation ; ar:invokedThroughKind {tool_kind} ;",
             f"    ar:mcpToolName {lit(name)} ;",
-            *( [f"    ar:mcpToolset {', '.join(lit(ts) for ts in tool['toolsets'])} ;"] if tool["toolsets"] else [] ),
+            *([f"    ar:mcpToolset {', '.join(lit(ts) for ts in tool['toolsets'])} ;"] if tool["toolsets"] else []),
             f"    ar:targetsKind {', '.join(kinds)} ;",
             f"    ar:requires {', '.join(reqs)} ;",
-            *( [f"    ar:mayInitiateInternetCall {call} ;"] if remote else [] ),
+            *([f"    ar:mayInitiateInternetCall {call} ;"] if remote else []),
             f"    ar:sourceStatus {status} ;",
             f"    ar:sourceNote {lit(note)} ;",
             "    ar:hasPotentialEffect " + ",\n      ".join(effect_nodes) + " .",
@@ -195,7 +198,7 @@ def generate(server_id: str) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
         sys.exit("usage: python3 generate_mcp_ontology.py <server-id>   (reads ontology/mcp/sources/<server-id>.json)")
     server_id = sys.argv[1]
     target = MCP_DIR / f"{server_id}.trig"

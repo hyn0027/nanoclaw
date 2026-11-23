@@ -24,7 +24,7 @@ export function capActionData(data: unknown): unknown {
 
 export function recordAction(action: ActionDraft): void {
   try {
-    getAgentMailbox().operations.appendAction?.({ ...action, data: capActionData(action.data) });
+    getAgentMailbox().operations.appendAction({ ...action, data: capActionData(action.data) });
   } catch (err) {
     console.error(`[action-log] failed to record ${action.event}: ${err instanceof Error ? err.message : String(err)}`);
   }

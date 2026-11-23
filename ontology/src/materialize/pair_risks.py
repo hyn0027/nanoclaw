@@ -21,7 +21,6 @@ repository names, and handles go to the API.
 
 import json
 import re
-
 from pathlib import Path
 
 from rdflib import URIRef
@@ -277,11 +276,7 @@ def _routes(item: dict) -> list[str]:
                     path = [line]
             if path:
                 routes.append(" → ".join(path))
-    seen: list[str] = []
-    for r in routes:
-        if r not in seen:
-            seen.append(r)
-    return seen
+    return list(dict.fromkeys(routes))
 
 
 def influence_summary(item: dict) -> str:
@@ -335,26 +330,24 @@ def write_markdown(path: Path, title: str, model: str, total: int, selected: int
 
 
 def annotate(snap: Snapshot, outside: list[tuple], remote: list[tuple], downstream: list[tuple], model: str,
-             max_pairs: int | None, log_dir: Path | None = None, cross_only: bool = False, seed: int | None = None, workers: int = 20) -> None:
+             max_pairs: int | None, log_dir: Path, cross_only: bool, seed: int | None, workers: int) -> None:
     ROWS.clear()
     resources = items(snap, outside, remote, downstream)
     pair_filter = (lambda a, b: a["side"] != b["side"]) if cross_only else None
     hosts = sum(r["side"] == "host" for r in resources)
     total = hosts * (len(resources) - hosts) if cross_only else len(resources) * (len(resources) - 1) // 2
-    selected = total if max_pairs is None else min(max_pairs, total)
     results: list[tuple] = []
     title = f"Joint risks: session {snap.facts['session']['id']} at {snap.taken_at}"
 
-    def on_result(first: dict, second: dict, assessment: dict, done: int, count: int) -> None:
+    def on_result(first: dict, second: dict, assessment: dict, _done: int, count: int) -> None:
         results.append((first, second, assessment))
-        if log_dir:
-            write_markdown(log_dir / "joint-risks.md", title, model, total, count, results)
+        write_markdown(log_dir / "joint-risks.md", title, model, total, count, results)
 
     analyze_pairs(resources, model=model, max_pairs=max_pairs,
                   instructions=INSTRUCTIONS, schema=SCHEMA, schema_name="session_joint_risks",
                   cache_key="materialize-session-joint-risks-v3", extra_catalog={"kinds": kind_catalog(snap, resources), "rows": ROWS, "policies": policies(snap, resources)},
                   results_prefix="session-assessments", pair_filter=pair_filter, seed=seed, workers=workers,
                   render=render, describe=describe, key="id",
-                  results_dir=log_dir, results_name="joint-risks.jsonl" if log_dir else None, on_result=on_result)
-    if log_dir and results:
+                  results_dir=log_dir, results_name="joint-risks.jsonl", on_result=on_result)
+    if results:
         print(f"Joint risks (readable): {log_dir / 'joint-risks.md'}")

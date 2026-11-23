@@ -15,13 +15,12 @@ from .catalog import Catalog
 @dataclass
 class Inventory:
     skills: list[str]
-    operations: set[Identifier] = field(default_factory=set)
     # (skill, operation, skill graph)
     operation_rows: list[tuple[str, Identifier, Graph]] = field(default_factory=list)
-    # (skill, operation label, effect label, resource label)
-    effect_rows: list[tuple[str, str, str, str]] = field(default_factory=list)
-    # (skill, operation, call, skill graph)
-    calls: list[tuple[str, Identifier, Identifier, Graph]] = field(default_factory=list)
+    # distinct (skill, operation, effect type, resource) labels
+    effect_count: int = 0
+    # (skill, operation, call); the call is read from the combined graph
+    calls: list[tuple[str, Identifier, Identifier]] = field(default_factory=list)
     # resource kind -> effect types, from skill operations
     touches: dict[Identifier, set[Identifier]] = field(default_factory=lambda: defaultdict(set))
     native: list[Identifier] = field(default_factory=list)
@@ -48,7 +47,6 @@ def collect_skill_operations(inv: Inventory, catalog: Catalog, combined: Graph, 
     for skill in inv.skills:
         graph, node = catalog[skill]["graph"], catalog[skill]["node"]
         for operation in graph.objects(node, AR.declaresOperation):
-            inv.operations.add(operation)
             inv.operation_rows.append((skill, operation, graph))
             for effect in graph.objects(operation, AR.hasPotentialEffect):
                 for effect_type in graph.objects(effect, AR.effectType):
@@ -63,8 +61,8 @@ def collect_skill_operations(inv: Inventory, catalog: Catalog, combined: Graph, 
                 vias = set(combined.objects(call, AR.callViaKind))
                 if not any(route_reaches(combined, invocations, source, via) for source in invoked for via in vias):
                     raise SystemExit(f"No operation-to-call route: {operation} -> {call}")
-                inv.calls.append((skill, operation, call, combined))
-    inv.effect_rows = sorted(effects)
+                inv.calls.append((skill, operation, call))
+    inv.effect_count = len(effects)
     inv.operation_rows.sort(key=lambda row: (row[0], str(row[1])))
     inv.calls.sort(key=lambda row: (row[0], str(row[1]), str(row[2])))
 

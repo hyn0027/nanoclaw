@@ -10,7 +10,7 @@ from .modifications.common import controls
 from .snapshot import Snapshot
 
 
-def assess_routes(snap: Snapshot) -> list[tuple[str, str, str, str]]:
+def assess_routes(snap: Snapshot) -> None:
     lockdown, scope = snap.lockdown_on, snap.cli_scope
     extra = sum(m["Destination"].startswith("/workspace/extra/") for m in snap.facts["inspect"]["Mounts"])
     lock = f"lockdown={'on' if lockdown else 'off'}"
@@ -25,9 +25,5 @@ def assess_routes(snap: Snapshot) -> list[tuple[str, str, str, str]]:
         ("NanoClawCreateAgentTool", "available", cli),
         ("NanoClawAdditionalHostDirectory", "present" if extra else "absent", f"extra_mounts={extra}"),
     ]
-    out = []
     for name, status, evidence in rows:
-        gate = controls(snap, AR[name])
-        snap.add(snap.node(f"route_{name}"), OBS.RouteAssessment, OBSERVED, name, assesses=AR[name], status=status, reason=evidence, controls=gate)
-        out.append((name, status, evidence, gate))
-    return out
+        snap.add(snap.node(f"route_{name}"), OBS.RouteAssessment, OBSERVED, name, assesses=AR[name], status=status, reason=evidence, controls=controls(snap, AR[name]))

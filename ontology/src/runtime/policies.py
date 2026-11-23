@@ -12,14 +12,13 @@ own identity, ``OneCLI::Agent``):
   copy (the next reconcile carries it over).
 - An *agent copy*, the only thing created in OneCLI: source ``<template source>@<agent-
   group-id>`` and name ``<template name>:<agent-group-id>``, the template's policies with
-  the principal narrowed to that agent (``principal == OneCLI::Agent::"<uuid>"``). It is on
-  while that agent needs it: one of its active sessions loaded the skill (a Skill tool call,
-  or reading its SKILL.md, in the session's action log), or the agent group has the MCP
-  server configured with a session active. On means every policy in it is on ("allow every
-  operation" of what was loaded); off when the agent no longer needs it. So one agent
-  loading a skill never opens anything for another agent. A copy without a template is
-  kept and used as is (a group for that agent only); a template is made only for an agent
-  that has no copy yet.
+  the principal narrowed to that agent (``principal == OneCLI::Agent::"<uuid>"``). It is on,
+  with every policy in it on, while that agent needs it: one of its active sessions loaded
+  the skill (a Skill tool call, or reading its SKILL.md, in the session's action log), or
+  the agent group has the MCP server configured with a session active; off otherwise. So
+  one agent loading a skill never opens anything for another. A copy without a template is
+  used as is (a group for that agent only); a template is made only for an agent that has
+  no copy yet.
 
 A loaded skill or MCP server with no template gets one: an MCP server with a pinned
 snapshot (ontology/mcp/sources/<id>.json) from generate_mcp_policies.py (every tool on,
@@ -40,7 +39,9 @@ from rdflib import Graph
 from ..common.namespaces import AR
 from ..common.paths import MCP_DIR, ROOT
 from ..materialize.gateway_policy import api_key
+from ..materialize.model import add_skill_graphs
 from . import base
+from .expand import skill_evidence
 from .llm import LLMError, call
 from .paths import NANOCLAW, RUNTIME_DIR, SKILLS_SRC, session_dir
 from .store import now
@@ -125,23 +126,36 @@ def skills_ever_loaded(group_id: str, session_id: str | None = None) -> dict[str
     return out
 
 
+def _loads_path(group_id: str, session_id: str):
+    return session_dir(group_id, session_id) / "loads.json"
+
+
+def _read_loads(path) -> dict:
+    return json.loads(path.read_text()) if path.exists() else {"offset": 0, "skills": {}}
+
+
+def _write_loads(path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2) + "\n")
+
+
 def skill_loads(group_id: str, session_id: str) -> dict[str, str]:
     """Skills the session's agent has loaded: name -> first time seen. Reads the session's
-    action log incrementally (offset kept in <session>/ontology/loads.json, written only here)."""
-    path = session_dir(group_id, session_id) / "loads.json"
-    state = json.loads(path.read_text()) if path.exists() else {"offset": 0, "skills": {}}
+    action log incrementally (offset kept in <session>/ontology/loads.json)."""
+    path = _loads_path(group_id, session_id)
+    state = _read_loads(path)
     log = NANOCLAW / "logs" / "sessions" / group_id / session_id / "actions.jsonl"
     if not log.exists():
         return state["skills"]
+    offset = state["offset"] if state["offset"] <= log.stat().st_size else 0  # log replaced: start over
     with open(log, "rb") as f:
-        f.seek(state["offset"] if state["offset"] <= log.stat().st_size else 0)
+        f.seek(offset)
         chunk = f.read()
     complete = chunk[: chunk.rfind(b"\n") + 1]
     for name, ts in loads_in_lines(complete.decode(errors="replace").splitlines(), installed_skills()).items():
         state["skills"].setdefault(name, ts)
-    state["offset"] = (state["offset"] if state["offset"] <= log.stat().st_size else 0) + len(complete)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n")
+    state["offset"] = offset + len(complete)
+    _write_loads(path, state)
     return state["skills"]
 
 
@@ -151,11 +165,10 @@ def mark_loaded(group_id: str, session_id: str, skill: str) -> bool:
     not a NanoClaw container skill (nothing to record: it has no policy group or graph)."""
     if skill not in installed_skills():
         return False
-    path = session_dir(group_id, session_id) / "loads.json"
-    state = json.loads(path.read_text()) if path.exists() else {"offset": 0, "skills": {}}
+    path = _loads_path(group_id, session_id)
+    state = _read_loads(path)
     state["skills"].setdefault(skill, now())
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n")
+    _write_loads(path, state)
     return True
 
 
@@ -205,10 +218,6 @@ def write_template(template: dict) -> None:
     template_file(template["source"]).write_text(json.dumps(keep, indent=2) + "\n")
 
 
-def is_template(source: str) -> bool:
-    return source.startswith(("skill:", "mcp:")) and AGENT_SEP not in source
-
-
 def copy_source(template_source: str, agent_group: str) -> str:
     return f"{template_source}{AGENT_SEP}{agent_group}"
 
@@ -223,13 +232,14 @@ def onecli_agents() -> dict[str, dict]:
     return {a["identifier"]: a for a in api("GET").get("agents", []) if a.get("identifier")}
 
 
-def copy_body(template: dict, agent_group: str, agent: dict, enabled: bool) -> dict:
+def copy_body(template: dict, agent_group: str, agent: dict) -> dict:
+    """The agent's copy of ``template``, switched on."""
     note = f"For agent {agent.get('name') or agent_group} ({agent_group}) only, copied from template {template['name']}. "
     return {
         "name": f"{template['name']}:{agent_group}"[:100],
         "source": copy_source(template["source"], agent_group),
         "description": (note + (template.get("description") or ""))[:500],
-        "enabled": enabled,
+        "enabled": True,
         "policies": [{"name": p["name"], "description": p.get("description"), "policyText": scope_to_agent(p["policyText"], agent["id"]),
                       "enabled": True} for p in template["policies"]],
     }
@@ -283,14 +293,12 @@ grants nothing. If it needs no network access of its own, return no policies and
 
 def skill_endpoints(name: str) -> list[str]:
     """Internet call patterns the skill's reviewed ontology declares (empty when it has none)."""
-    from ..materialize.model import add_skill_graphs
     g = Graph()
     add_skill_graphs(g, [name])
     return sorted({str(p) for p in g.objects(None, AR.callEndpointPattern)})
 
 
 def draft_group(want: dict, error: str | None = None) -> dict:
-    from .cli import skill_evidence
     if want["kind"] == "skill":
         subject = f"NanoClaw container skill '{want['name']}'"
         evidence = skill_evidence(want["name"])
@@ -305,8 +313,7 @@ def draft_group(want: dict, error: str | None = None) -> dict:
         "# Its files" if want["kind"] == "skill" else "# Its endpoint", evidence,
         f"# The previous attempt was rejected by OneCLI's validator:\n{error}" if error else "",
     ] if x)
-    out, _usage = call(GROUP_SYSTEM, prompt, GROUP_SCHEMA)
-    return out
+    return call(GROUP_SYSTEM, prompt, GROUP_SCHEMA)[0]
 
 
 def validate_template(template: dict) -> None:
@@ -347,23 +354,11 @@ def create_template(source: str, want: dict, log) -> dict:
     raise PolicyError(f"could not draft a valid template for {source}: {error}")
 
 
-def move_templates_out(groups: list[dict], changes: list[str]) -> None:
-    """Templates once kept as (switched-off) OneCLI groups: save each as a file (unless one
-    exists) and delete the group, so OneCLI's workspace layer holds only the operator's groups."""
-    for g in groups:
-        if not is_template(g.get("source") or ""):
-            continue
-        if read_template(g["source"]) is None:
-            write_template(g)
-        api("DELETE", f"/groups/{g['id']}")
-        changes.append(f"template {g['name']} moved out of OneCLI to {template_file(g['source']).name}")
-
-
 # ── reconcile ────────────────────────────────────────────────────────────────
 
 def reconcile(generate: bool, log) -> dict:
-    """Bring OneCLI's groups in line with what each agent's active sessions have loaded:
-    templates off, one copy per agent that needs it, on while needed. Returns a summary."""
+    """Bring OneCLI's agent copies in line with what each agent's active sessions have
+    loaded: one copy per agent that needs it, on while needed. Returns a summary."""
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     lock = open(RUNTIME_DIR / "policies.lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -372,7 +367,15 @@ def reconcile(generate: bool, log) -> dict:
     by_source = {g["source"]: g for g in groups if g.get("source")}
     changes = []
 
-    move_templates_out(groups, changes)
+    def switch_on(group: dict, reason: str) -> None:
+        if not group["enabled"]:
+            api("PATCH", f"/groups/{group['id']}", {"enabled": True})
+            changes.append(f"group {group['name']} on ({reason})")
+        off = [p for p in group["policies"] if not p["enabled"]]
+        for p in off:
+            api("PATCH", f"/policies/{p['id']}", {"enabled": True})
+        if off:
+            changes.append(f"group {group['name']}: {len(off)} policies switched on (every operation allowed)")
 
     # A template is needed only for agents that have no copy yet: an agent's existing copy is
     # used as is when its template is gone (e.g. a group kept for one agent only).
@@ -397,35 +400,23 @@ def reconcile(generate: bool, log) -> dict:
         for ag, why in item["agents"].items():
             src = copy_source(source, ag)
             needed_copies.add(src)
+            existing = by_source.get(src)
+            reason = "; ".join(why)
             if template is None:
-                existing = by_source.get(src)
-                if existing is not None and not existing["enabled"]:
-                    api("PATCH", f"/groups/{existing['id']}", {"enabled": True})
-                    changes.append(f"group {existing['name']} on ({'; '.join(why)}; no template, used as is)")
                 if existing is not None:
-                    for p in [p for p in existing["policies"] if not p["enabled"]]:
-                        api("PATCH", f"/policies/{p['id']}", {"enabled": True})
+                    switch_on(existing, reason + "; no template, used as is")
                 continue
             agent = agents.get(ag)
             if agent is None:
                 changes.append(f"{template['name']} for {ag}: no OneCLI agent for it yet (it has not made a request); not switched on")
                 continue
-            body = copy_body(template, ag, agent, enabled=True)
-            existing = by_source.get(src)
-            reason = "; ".join(why)
+            body = copy_body(template, ag, agent)
             if existing is None or not same_content(existing, body):
                 api("PUT", "/groups/sync", body)
                 changes.append(f"group {body['name']} {'created' if existing is None else 'updated from template'} and on: "
                                f"{len(body['policies'])} policies for {agent.get('name') or ag} ({reason})")
-                continue
-            if not existing["enabled"]:
-                api("PATCH", f"/groups/{existing['id']}", {"enabled": True})
-                changes.append(f"group {existing['name']} on ({reason})")
-            off = [p for p in existing["policies"] if not p["enabled"]]
-            for p in off:
-                api("PATCH", f"/policies/{p['id']}", {"enabled": True})
-            if off:
-                changes.append(f"group {existing['name']}: {len(off)} policies switched on (every operation allowed)")
+            else:
+                switch_on(existing, reason)
 
     for g in groups:
         source = g.get("source") or ""

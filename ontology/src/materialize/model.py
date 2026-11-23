@@ -23,14 +23,24 @@ def load_model() -> Graph:
     return model
 
 
-def skill_modules() -> dict[str, Path]:
-    """Support-module id (ar:ontologyModuleId) -> graph file, for modules kept with the skills."""
+def _skill_files(prop: str) -> dict[str, Path]:
+    """Value of ``ar:<prop>`` -> the skills-folder graph file declaring it."""
     found = {}
     for path in sorted(SKILLS_DIR.glob("*.trig")):
-        match = re.search(r'ar:ontologyModuleId "([^"]+)"', path.read_text())
+        match = re.search(rf'ar:{prop} "([^"]+)"', path.read_text())
         if match:
             found[match.group(1)] = path
     return found
+
+
+def skill_directories() -> dict[str, Path]:
+    """Skill directory name -> skill graph file."""
+    return _skill_files("skillDirectory")
+
+
+def skill_modules() -> dict[str, Path]:
+    """Support-module id (ar:ontologyModuleId) -> graph file, for modules kept with the skills."""
+    return _skill_files("ontologyModuleId")
 
 
 def add_skill_graphs(model: Graph, installed: list[str]) -> list[str]:
@@ -101,16 +111,6 @@ def pinned_source(model: Graph) -> tuple[Path | None, str]:
     repo = next(model.objects(AR.NanoClawCoreModule, AR.sourceRepositoryPath), None)
     revision = str(next(model.objects(AR.NanoClawCoreModule, AR.sourceRevision), ""))
     return (Path(str(repo)) if repo is not None else None), revision
-
-
-def skill_directories() -> dict[str, Path]:
-    """Skill directory name -> skill graph file."""
-    found = {}
-    for path in sorted(SKILLS_DIR.glob("*.trig")):
-        match = re.search(r'ar:skillDirectory "([^"]+)"', path.read_text())
-        if match:
-            found[match.group(1)] = path
-    return found
 
 
 def side_of(model: Graph, kind: URIRef) -> URIRef | None:

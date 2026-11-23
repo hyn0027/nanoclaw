@@ -30,7 +30,7 @@ import { getAgentMailbox } from './mailbox/index.js';
 const POLL_MS = 1_000;
 const RESEND_MS = 5 * 60_000;
 
-export interface GateResult {
+interface GateResult {
   ok: boolean;
   error?: string;
 }
@@ -45,11 +45,11 @@ function requestId(): string {
   return `ont-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function send(content: Record<string, unknown>): Promise<void> {
+async function send(content: { action: string; requestId: string }): Promise<void> {
   const mailbox = getAgentMailbox();
   await mailbox.run(() =>
     mailbox.operations.writeMessageOut({
-      id: `${String(content.requestId ?? requestId())}-${Date.now()}`,
+      id: `${content.requestId}-${Date.now()}`,
       kind: 'system',
       content: JSON.stringify(content),
     }),
@@ -91,6 +91,11 @@ async function request(reason: 'turn' | 'skill', skill?: string): Promise<GateRe
 /** On only when the host runs the ontology runtime (it sets NANOCLAW_ONTOLOGY_GATE=1). */
 function gateOn(): boolean {
   return process.env.NANOCLAW_ONTOLOGY_GATE === '1';
+}
+
+/** What the user is told when a turn is refused because the sync failed. */
+export function turnRefusal(error: string | undefined): string {
+  return `I can't act on this yet: updating my environment's policies failed (${error ?? 'unknown error'}). It will be retried with your next message.`;
 }
 
 /** Wait until the host's ontology covers the agent's current setup. */

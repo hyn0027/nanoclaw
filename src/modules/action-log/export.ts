@@ -79,15 +79,14 @@ function actionEntry(row: MailboxActionRow): ActionLogEntry {
  * synchronous so a batch is never half-recorded relative to its cursor.
  */
 export function exportSessionActivity(mailbox: MailboxSession, dir: string): number {
-  if (!mailbox.getActionsAfter && !mailbox.getInboundAfterSeq && !mailbox.getOutboundAfterSeq) return 0;
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const cursor = readCursor(dir);
   let written = 0;
 
   for (;;) {
-    const inbound = mailbox.getInboundAfterSeq?.(cursor.inSeq, EXPORT_BATCH) ?? [];
-    const outbound = mailbox.getOutboundAfterSeq?.(cursor.outSeq, EXPORT_BATCH) ?? [];
-    const actions = mailbox.getActionsAfter?.(cursor.actionId, EXPORT_BATCH) ?? [];
+    const inbound = mailbox.getInboundAfterSeq(cursor.inSeq, EXPORT_BATCH);
+    const outbound = mailbox.getOutboundAfterSeq(cursor.outSeq, EXPORT_BATCH);
+    const actions = mailbox.getActionsAfter(cursor.actionId, EXPORT_BATCH);
     if (inbound.length + outbound.length + actions.length === 0) break;
 
     const entries = [

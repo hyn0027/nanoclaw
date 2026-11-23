@@ -9,7 +9,8 @@ For each ``ar:Operation`` a loaded skill declares, each ``ar:hasPotentialEffect`
 ``host``       the kind's model location (``hostPathPattern``, else containing kind)
 ``remote``     the open ``routesToKind`` paths from the operation's endpoints; a
                path through the OneCLI gateway yields one row per Cedar permit
-               applying to the agent
+               applying to the agent (for an MCP tool: per the gateway's own
+               decision on the tools/call request)
 
 Status follows the operation's ``ar:requires`` exactly as for native
 capabilities. Controls are ``ar:protectedByKind`` of the kinds involved and
@@ -26,10 +27,11 @@ from rdflib.namespace import RDF
 
 from ..common.namespaces import AR, OBS
 from ..common.rdf import short
-from .constants import AVAILABLE, CONDITIONAL, MUTATING_EFFECTS, SUBPATHS, UNAVAILABLE, UNKNOWN, UNSATISFIED
+from .capabilities import requirement_status
+from .constants import MUTATING_EFFECTS
 from .gateway_policy import evaluate, policy_entries
-from .modifications.common import ancestors, endpoint_name, gate, host_backing, kind_location, location, render_paths, route_paths
-from .modifications.remote import GET_ONLY, credential_tokens, direct_rows, host_rows, via_gateway
+from .modifications.common import ancestors, endpoint_name, gate, host_backing, kind_location, location, render_paths, route_paths, subpath
+from .modifications.remote import GET_ONLY, credential_tokens, direct_rows, host_permit_rows, via_gateway
 from .snapshot import Snapshot
 
 
@@ -96,23 +98,11 @@ def mount_locations(snap: Snapshot, kind: URIRef) -> list[tuple[str, str, bool]]
             exposed = snap.graph.value(loc, RDF.type)
             if exposed is None or not (kind in ancestors(snap, exposed) or ancestors(snap, exposed) & homes):
                 continue
-            tail = SUBPATHS.get(kind, "")
-            if isinstance(tail, dict):
-                tail = tail.get(exposed, "")
+            tail = subpath(kind, exposed)
             hpath = host_backing(snap, dest)
             out.append((f"{dest}/{tail}" if tail else dest, f"{hpath}/{tail}" if tail else hpath, bool(mnt["RW"])))
             break
     return sorted(set(out))
-
-
-def op_status(snap: Snapshot, op: URIRef) -> tuple[URIRef, str]:
-    reqs = sorted(snap.model.objects(op, AR.requires))
-    statuses = {r: snap.conditions.get(r, (UNKNOWN, ""))[0] for r in reqs}
-    blocked = [r for r, s in statuses.items() if s == UNSATISFIED]
-    pending = [r for r, s in statuses.items() if s == UNKNOWN]
-    status = UNAVAILABLE if blocked else CONDITIONAL if pending else AVAILABLE
-    why = "; ".join([f"blocked: {short(r)}" for r in blocked] + [f"pending: {short(r)}" for r in pending]) or "-"
-    return status, why
 
 
 def call_paths(m, op: URIRef) -> list[str]:
@@ -150,30 +140,28 @@ def assess_operations(snap: Snapshot) -> tuple[list[tuple], list[tuple], list[tu
     agent = snap.facts["onecli_agent"]
     entries = policy_entries(snap.facts["gateway_policy"], agent["id"] if agent else None)
     inside, host, remote = [], [], []
-    mcp_names = {server_id: name for name, server_id in snap.facts.get("modeled_mcp", {}).items()}
+    mcp_names = {server_id: name for name, server_id in snap.facts["modeled_mcp"].items()}
     sources = [(s, str(m.value(s, AR.skillDirectory) or short(s)), None) for s in sorted(m.subjects(RDF.type, AR.Skill), key=short)
-               if str(m.value(s, AR.skillDirectory) or short(s)) in snap.facts.get("modeled_skills", [])]
+               if str(m.value(s, AR.skillDirectory) or short(s)) in snap.facts["modeled_skills"]]
     sources += [(s, f"mcp:{mcp_names[str(m.value(s, AR.mcpServerId))]}", mcp_names[str(m.value(s, AR.mcpServerId))])
                 for s in sorted(m.subjects(RDF.type, AR.MCPServer), key=short) if str(m.value(s, AR.mcpServerId)) in mcp_names]
     env = Path(snap.facts["nanoclaw_root"]) / ".env"
     for skill, name, mcp_name in sources:
         for op in sorted(m.objects(skill, AR.declaresOperation), key=short):
-            status, _ = op_status(snap, op)
+            status, blocked, pending = requirement_status(snap, m.objects(op, AR.requires))
             # Hosts the operation's internet calls name (callEndpointPattern), if any.
             # A pattern with a {placeholder} names no concrete host.
             hosts = sorted({urlparse(str(pat)).hostname or str(pat) for call in m.objects(op, AR.mayInitiateInternetCall)
                             for pat in m.objects(call, AR.callEndpointPattern) if "{" not in str(pat)})
             # Requirements not satisfied, with their evidence, shown in every gate of the operation.
-            req_facts = [f"{'blocked' if snap.conditions[r][0] == UNSATISFIED else 'pending'}: {short(r)} ({snap.conditions[r][1]})"
-                         for r in sorted(m.objects(op, AR.requires)) if r in snap.conditions and snap.conditions[r][0] in (UNSATISFIED, UNKNOWN)]
+            req_facts = [f"{'blocked' if r in blocked else 'pending'}: {short(r)} ({snap.conditions[r][1]})"
+                         for r in sorted(blocked + pending) if r in snap.conditions]
             st = short(status)
             endpoints = sorted(m.objects(op, AR.invokedThroughKind), key=short)
             tool_name = m.value(op, AR.mcpToolName)
             if mcp_name and tool_name is not None:
                 # An MCP tool: the name the agent's provider calls it by.
-                label = f"mcp__{mcp_name}__{tool_name}"
-                via = label
-                tools = label
+                label = via = tools = f"mcp__{mcp_name}__{tool_name}"
             else:
                 tools = ", ".join(sorted({endpoint_name(snap, e) for e in endpoints})) or "-"
                 label = f"{name}/{short(op)}"
@@ -219,8 +207,7 @@ def assess_operations(snap: Snapshot) -> tuple[list[tuple], list[tuple], list[tu
                             # Decided by the gateway itself: the tools/call request this tool sends.
                             remote += mcp_tool_rows(snap, res, eff_text(etypes), route, st, hosts, str(tool_name), call_paths(m, op), kinds, req_facts, env)
                             continue
-                        kind_hosts = hosts or None
-                        if kind_hosts is None:
+                        if not hosts:
                             # The call names no endpoint: it can reach whatever a permit allows.
                             for entry in entries:
                                 if tools in GET_ONLY and entry["methods"] is not None and "GET" not in entry["methods"]:
@@ -228,7 +215,7 @@ def assess_operations(snap: Snapshot) -> tuple[list[tuple], list[tuple], list[tu
                                 remote.append((res, entry["where"], eff_text(etypes), route, st,
                                                controls_of(*kinds, extra=entry["tokens"] + credential_tokens(snap, entry["host"]))))
                             continue
-                        remote += host_rows(snap, res, eff_text(etypes), route, st, kind_hosts, entries, kinds, req_facts)
+                        remote += host_permit_rows(snap, res, eff_text(etypes), route, st, hosts, entries, kinds, req_facts)
                 elif side is not None:
                     host.append((res, kind_location(snap, kind), eff_text(etypes), via, st, controls_of(kind, *endpoints)))
                 else:

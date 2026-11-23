@@ -17,29 +17,29 @@ nothing observed rules it out, not that it was exercised or will succeed.
 """
 
 import argparse
-
-from table_output import set_table_width
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from table_output import set_table_width
+
 from ..common.paths import OBSERVATIONS_DIR
 from .capabilities import assess_capabilities
-from .gateway_policy import DEFAULT_IGNORED_GROUPS, deny_by_default_problem, set_ignored_groups
 from .collect import collect
 from .conditions import resolve_conditions
+from .downstream import assess_downstream
+from .gateway_policy import DEFAULT_IGNORED_GROUPS, deny_by_default_problem, set_ignored_groups
+from .instances import discover, with_instances, write_instances
 from .instantiate import instantiate
 from .model import add_mcp_graphs, add_skill_graphs, load_model, pinned_source, skill_directories, stale_skill_graphs
 from .modifications import assess_modifications
 from .operations import assess_operations
-from .downstream import assess_downstream
-from .instances import discover, with_instances, write_instances
+from .output import check_instance_types, write_snapshot
 from .pair_risks import annotate
 from .probe import ContainerProbe
-from .run_log import RunLog
-from .output import check_instance_types, write_snapshot
 from .report import print_report
 from .routes import assess_routes
+from .run_log import RunLog
 from .snapshot import Snapshot
 from .tools import assess_tools
 
@@ -79,14 +79,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     set_table_width(args.width)
-    ignored = set(args.ignore_policy_group or ()) | (set() if args.include_default_policy else set(DEFAULT_IGNORED_GROUPS))
-    set_ignored_groups(ignored)
+    set_ignored_groups(set(args.ignore_policy_group or ()) | (set() if args.include_default_policy else set(DEFAULT_IGNORED_GROUPS)))
     model = load_model()
     pinned_repo, pinned_rev = pinned_source(model)
-    nanoclaw = args.nanoclaw or pinned_repo
-    facts = collect(nanoclaw, args.session)
-    # Only skills the agent has ever loaded (the action log shows it invoked them) are
-    # materialized, unless --all-skills. Per agent: only this agent group's own sessions count.
+    facts = collect(args.nanoclaw or pinned_repo, args.session)
+    # Only skills the agent has loaded (per its action logs) are materialized, unless --all-skills.
     from ..runtime.policies import skills_ever_loaded
     session = facts["session"]
     facts["loaded_skills"] = skills_ever_loaded(session["agent_group_id"], session["id"] if args.skills_loaded_in == "session" else None)
@@ -99,7 +96,7 @@ def main() -> None:
     facts["modeled_mcp"] = add_mcp_graphs(model, facts["config"].get("mcp_servers") or {})
     facts["runtime_ontology"] = None if args.base_only else load_runtime(facts, model, expand=not args.no_expand)
     taken_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    log = RunLog(args.out, facts["session"]["id"], taken_at)
+    log = RunLog(args.out, session["id"], taken_at)
     try:
         run(args, facts, model, pinned_rev, taken_at, log)
     finally:
@@ -155,18 +152,17 @@ def run(args: argparse.Namespace, facts: dict, model, pinned_rev: str, taken_at:
     log.write_json("requests.jsonl", requests)
     write_instances(snap.instances, log.dir / "instances.json")
     inside, outside, remote = assess_modifications(snap, assess_operations(snap))
-    outside_rows = outside  # without the instance lines, for the joint-risk items
-    outside = with_instances(snap, outside)
     downstream, ruled_out = assess_downstream(snap, snap.raw_remote)
     check_instance_types(snap)
 
     log.start_tables()
     # not shown: what instances or a declared scope rule out; kept in the run log only
     log.write_json("ruled-out.jsonl", [{"step": a, "started_by": b.splitlines(), "why": c} for a, b, c in ruled_out])
-    print_report(snap, inside, outside, remote, downstream)
+    print_report(snap, inside, with_instances(snap, outside), remote, downstream)
     snapshot = None if args.no_write else write_snapshot(snap, args.out)
     if snapshot:
         print(f"\nSnapshot written: {snapshot}")
     report = log.write_report(f"materialize: session {facts['session']['id']} at {taken_at}", snap.findings, snapshot)
     print(f"Full report (unwrapped): {report}")
-    annotate(snap, outside_rows, remote, downstream, model=args.model, max_pairs=args.max_pairs, log_dir=log.dir, cross_only=args.cross_only, seed=args.seed, workers=args.workers)
+    # host rows without the instance lines: pair_risks resolves the instances itself
+    annotate(snap, outside, remote, downstream, model=args.model, max_pairs=args.max_pairs, log_dir=log.dir, cross_only=args.cross_only, seed=args.seed, workers=args.workers)

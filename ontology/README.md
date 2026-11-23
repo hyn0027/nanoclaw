@@ -86,7 +86,9 @@ skill_ontologies/
   manifest.json          one list of selected ontology IDs
   loader.py              entry point → src.loader
   llm_annotation.py      resource pairing, prompts, and OpenAI calls
-  table_output.py        aligned text tables for both reports
+  table_output.py        aligned text tables for the CLI reports
+  generate_mcp_ontology.py   MCP server snapshot → ontology/mcp/<id>.trig
+  generate_mcp_policies.py   MCP server snapshot → OneCLI Cedar policy group
   materialize.py         entry point → src.materialize
   observations/          snapshot graphs (git-ignored; contain real identifiers)
   src/                   code
@@ -127,6 +129,7 @@ skill_ontologies/
       container-tooling.trig
       vercel.trig
       ...one graph per skill...
+    mcp/                 generated MCP server graphs; sources/ holds their pinned snapshots
     examples/            sample observation graphs for external RDF tools
 ```
 
@@ -303,7 +306,7 @@ ar:skill_coding_agent a ar:Skill ;
   ...
 ```
 
-The loader discovers module graphs in `ontology/universal/*.trig`, `ontology/nanoclaw/*.trig`, `ontology/claude/*.trig`, and `ontology/skills/*.trig`, and discovers skill graphs in `ontology/skills/*.trig`. Each file contains one named graph. Fixed infrastructure files remain at `ontology/universal/vocabulary.ttl` and `ontology/universal/shapes.ttl`; this avoids duplicating their paths in a catalog.
+The loader discovers module graphs in `ontology/universal/*.trig`, `ontology/nanoclaw/*.trig`, `ontology/claude/*.trig`, and `ontology/skills/*.trig`, and discovers skill graphs in `ontology/skills/*.trig` and MCP server graphs (catalogued like skills) in `ontology/mcp/*.trig`. Each file contains one named graph. Fixed infrastructure files remain at `ontology/universal/vocabulary.ttl` and `ontology/universal/shapes.ttl`; this avoids duplicating their paths in a catalog.
 
 During dependency preflight, the loader parses graph metadata, checks that selected ontology IDs exist, and requires every dependency to already be selected in `manifest.json`. It does not assemble the combined graph until this preflight succeeds. As selected graphs are added, it verifies module source revisions and skill-source hashes. A missing or unknown dependency produces a warning and aborts; dependencies are never introduced automatically. Individual named graphs remain in the catalog; no redundant dataset copy is constructed.
 
@@ -344,8 +347,8 @@ Every always-loaded graph is checked to contain no `ar:Operation`, `ar:Potential
 For an agent modifying this project, the order matters:
 
 1. Read `manifest.json` as a JSON array of unique ontology IDs.
-2. Discover every `*.trig` file under `ontology/universal/`, `ontology/nanoclaw/`, `ontology/claude/`, and `ontology/skills/`. Each must contain exactly one non-empty named graph.
-3. In one pass, identify each graph as a module or skill from its RDF metadata and reject duplicate IDs.
+2. Discover every `*.trig` file under `ontology/universal/`, `ontology/nanoclaw/`, `ontology/claude/`, `ontology/skills/`, and `ontology/mcp/`. Each must contain exactly one non-empty named graph.
+3. In one pass, identify each graph as a module, skill, or MCP server from its RDF metadata and reject duplicate IDs.
 4. Resolve the manifest IDs and check every selected graph's declared dependencies. Missing dependencies warn and abort before any active graph is loaded.
 5. Load the vocabulary and selected graphs in manifest order, checking module source pins and skill-source hashes as they are added.
 6. Check typed relationship endpoints, mount sides and bind sources (`locatedOn`/`executesOn` name a system component; `bindsFromKind` only on mounts), provider tool names and refinements, subtype cycles, endpoint parentage, shared-graph restrictions, and equivalent-class shape coverage.
@@ -556,7 +559,7 @@ Local stdio is not Internet traffic. A local server's later HTTP call can use On
 
 The former compatibility vocabulary has been removed. Skill graphs now name NanoClaw endpoints directly. This is a **translation of the ontology models**, not a claim that the original skill text can execute unchanged. The source `SKILL.md` hashes remain pinned as provenance and drift checks.
 
-An operation translated beyond what its source states uses `ar:adaptationStatus ar:InferredForNanoClaw`. Its original `ar:sourceStatus` remains separate, so script-inspected and example-only evidence is not erased by the translation. The loader counts adapted operations and prints a note.
+An operation translated beyond what its source states uses `ar:adaptationStatus ar:InferredForNanoClaw`. Its original `ar:sourceStatus` remains separate, so script-inspected and example-only evidence is not erased by the translation. The loader report shows it in each operation's Adaptation row.
 
 The detailed crosswalk is RDF inside each skill graph. Every skill links to named `ar:AdaptationMapping` resources with `ar:sourceAssumption`, `ar:nanoclawModel`, one or more `ar:adaptationDisposition` values, and `ar:semanticDifference`. When appropriate, `ar:adaptedOperation` links the crosswalk entry to the modeled operation. All skills also link to `ar:NanoClawSkillAdaptationPolicy`, which holds the shared interpretation rule and pinned NanoClaw revision.
 
@@ -883,7 +886,7 @@ def slack(ctx: Context) -> None:
     ...
 ```
 
-`kinds` are the model kinds it lists (they count as discovered when the function returns, even with none found, so "none exists" differs from "not enumerated"). Set `parent` to the containing instance's id following the model's `ar:containsKind`, so Creates are placed ("new X in <parent>") and scopes narrow; put a `match` attr on instances a row location can name (a host, a chat id, a repository) and `events` on handlers of `ar:triggerEvent` reactions. `live=True` sources get `ctx.probe` and are skipped under `--no-discovery`; they may only read (`get_json`, `mcp(...).call` of read-only tools) and never record secret values. `ctx.fail(reason)` stops a source and notes the reason on its kinds; `ctx.note(kinds, text)` records a partial gap. The kinds themselves come from the environment's ontology module (e.g. `github-environment`, `vercel`), so a new environment usually means a module there too.
+`kinds` are the model kinds it lists (they count as discovered when the function returns, even with none found, so "none exists" differs from "not enumerated"). Set `parent` to the containing instance's id following the model's `ar:containsKind`, so Creates are placed ("new X in <parent>") and scopes narrow; put a `match` attr on instances a row location can name (a host, a chat id, a repository) and `events` on handlers of `ar:triggerEvent` reactions. `live=True` sources get `ctx.probe` and are skipped under `--no-discovery`; they may only read (`get_json`, `mcp(...).call` of read-only tools) and never record secret values. A `ProbeError` escaping a source stops it and notes the error on its kinds; `ctx.note(kinds, text)` records a partial gap. The kinds themselves come from the environment's ontology module (e.g. `github-environment`, `vercel`), so a new environment usually means a module there too.
 
 The live sources run from inside the session's container (`src/materialize/probe.py`: `docker exec <container> curl`), so they take the agent's own path through the proxy and the OneCLI gateway, under its Cedar policies and with the credentials the gateway injects for it; their answer is what the agent can see. They can only read: REST calls are GET, and MCP calls are limited to tools the server's snapshot marks `readOnlyHint` (the probe refuses others). Each request is logged to the run's `requests.jsonl` (method, URL, tool, arguments, status; no bodies), and the instances, with their sources and gaps, to `instances.json`. `--no-discovery` skips the live sources. Discovered instances are also typed into the snapshot graph (`obs:Discovered`, `obs:instanceId`, `obs:partOf`).
 

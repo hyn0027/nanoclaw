@@ -83,7 +83,7 @@ import {
   writeSessionRouting,
 } from './session-manager.js';
 import type { AgentGroup, Session } from './types.js';
-import { invalidSpec, packageName } from './modules/self-mod/packages.js';
+import { firstInvalidSpec, packageName } from './modules/self-mod/packages.js';
 import { ontologyGateEnabled } from './modules/ontology-runtime/gate.js';
 import {
   describeInstalled,
@@ -1285,10 +1285,7 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<Packag
   }
 
   // Specs go into RUN lines verbatim: refuse any that is not a name or an exact pin.
-  const badSpec = [
-    ...aptPackages.map((p) => invalidSpec('apt', p)),
-    ...npmPackages.map((p) => invalidSpec('npm', p)),
-  ].find(Boolean);
+  const badSpec = firstInvalidSpec(aptPackages, npmPackages);
   if (badSpec) throw new Error(`refusing to build image: ${badSpec}`);
   let dockerfile = `FROM ${CONTAINER_IMAGE}\nUSER root\n`;
   if (aptPackages.length > 0) {
