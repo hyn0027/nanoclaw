@@ -4,6 +4,7 @@ import { recordAction } from '../db/action-log.js';
 import { clearContainerToolInFlight, setContainerToolInFlight } from '../db/container-state.js';
 import type { MemorySessionHookRegistration } from '../memory/session-hook.js';
 import { notifyTurnEnd, skillOfToolCall, syncBeforeSkill } from '../ontology-gate.js';
+import { permissionDeniedHook, permissionOptions } from '../permission-mode.js';
 import type { ResolvedRuntimeConfiguration } from '../provider-contracts/registry.js';
 // The execution-policy, inference, MCP, and memory derivations live in
 // claude-config.ts. The runtime contract (provider-contracts/claude.ts)
@@ -347,14 +348,14 @@ export class ClaudeProvider implements AgentProvider {
         systemPrompt: instructions
           ? { type: 'preset' as const, preset: 'claude_code' as const, append: instructions }
           : undefined,
-        allowedTools: [...this.mcp.allowedTools],
+        // Permission mode (bypass by default; auto / manual are baselines): the SDK's
+        // permission mode, pre-approved tools and the per-call approval callback.
+        ...permissionOptions(this.executionPolicy, [...this.mcp.allowedTools]),
         disallowedTools: [...this.executionPolicy.disallowedTools],
         env: this.env,
         model: this.inference.model,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         effort: this.inference.effort as any,
-        permissionMode: this.executionPolicy.permissionMode,
-        allowDangerouslySkipPermissions: this.executionPolicy.allowDangerouslySkipPermissions,
         settingSources: ['project', 'user', 'local'],
         // Only sent when enabled, so an install that never turns it on passes
         // exactly the options it always did. `fastMode` is a Settings member
@@ -365,6 +366,7 @@ export class ClaudeProvider implements AgentProvider {
           PreToolUse: [{ hooks: [preToolUseHook] }],
           PostToolUse: [{ hooks: [postToolUseHook] }],
           PostToolUseFailure: [{ hooks: [postToolUseHook] }],
+          PermissionDenied: [{ hooks: [permissionDeniedHook] }],
           SubagentStart: [{ hooks: [subagentHook] }],
           SubagentStop: [{ hooks: [subagentHook] }],
           PreCompact: [{ hooks: [createPreCompactHook(this.assistantName)] }],

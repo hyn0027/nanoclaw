@@ -14,26 +14,17 @@
  *     calls the turn made.
  *
  * Waits are unbounded on purpose: the host may be waiting for the operator to answer
- * a question (e.g. a token's scope). The heartbeat is touched while waiting so the
- * host's stuck-container sweep leaves the container alone, and the request is re-sent
- * every few minutes in case the host restarted and lost it. A failure (`ok: false`)
- * means the action is refused (fail closed).
+ * a question (e.g. a token's scope); see host-request.ts for the transport. A failure
+ * (`ok: false`) means the action is refused (fail closed).
  *
  * Wire format: the request is an outbound system message
  * `{ action: "ontology_sync", requestId, reason: "turn" | "skill", skill? }`; the reply
  * is an inbound system message carrying the same `requestId` and
  * `frame: { ok: boolean, error?: string }`, found with the CLI-response lookup.
  */
-import { touchHeartbeat } from './heartbeat.js';
-import { getAgentMailbox } from './mailbox/index.js';
+import { askHost, newRequestId, sendToHost, type HostAnswer } from './host-request.js';
 
-const POLL_MS = 1_000;
-const RESEND_MS = 5 * 60_000;
-
-interface GateResult {
-  ok: boolean;
-  error?: string;
-}
+type GateResult = HostAnswer;
 
 const syncedSkills = new Set<string>();
 
@@ -41,51 +32,9 @@ function log(msg: string): void {
   console.error(`[ontology-gate] ${msg}`);
 }
 
-function requestId(): string {
-  return `ont-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function send(content: { action: string; requestId: string }): Promise<void> {
-  const mailbox = getAgentMailbox();
-  await mailbox.run(() =>
-    mailbox.operations.writeMessageOut({
-      id: `${content.requestId}-${Date.now()}`,
-      kind: 'system',
-      content: JSON.stringify(content),
-    }),
-  );
-}
-
-async function request(reason: 'turn' | 'skill', skill?: string): Promise<GateResult> {
-  const id = requestId();
-  const content = { action: 'ontology_sync', requestId: id, reason, ...(skill ? { skill } : {}) };
-  const mailbox = getAgentMailbox();
-  const started = Date.now();
-  let sentAt = 0;
-  let announced = false;
-  for (;;) {
-    if (Date.now() - sentAt >= RESEND_MS) {
-      await send(content);
-      sentAt = Date.now();
-    }
-    const frame = await mailbox.run(() => {
-      const row = mailbox.operations.findCliResponse(id);
-      if (!row) return null;
-      mailbox.operations.markMessages([row.id], 'completed');
-      return (JSON.parse(row.content) as { frame: GateResult }).frame;
-    });
-    if (frame) {
-      if (Date.now() - started > 5_000)
-        log(`${reason}${skill ? ` ${skill}` : ''}: done after ${Math.round((Date.now() - started) / 1000)}s`);
-      return frame;
-    }
-    if (!announced && Date.now() - started > 5_000) {
-      log(`${reason}${skill ? ` ${skill}` : ''}: waiting for the host's ontology sync`);
-      announced = true;
-    }
-    touchHeartbeat();
-    await Bun.sleep(POLL_MS);
-  }
+function request(reason: 'turn' | 'skill', skill?: string): Promise<GateResult> {
+  const content = { action: 'ontology_sync', requestId: newRequestId('ont'), reason, ...(skill ? { skill } : {}) };
+  return askHost(content, `${reason}${skill ? ` ${skill}` : ''} (ontology sync)`, log);
 }
 
 /** On only when the host runs the ontology runtime (it sets NANOCLAW_ONTOLOGY_GATE=1). */
@@ -131,7 +80,7 @@ export function skillOfToolCall(tool: string, input: Record<string, unknown> | u
 export async function notifyTurnEnd(): Promise<void> {
   if (!gateOn()) return;
   try {
-    await send({ action: 'ontology_turn_end', requestId: requestId() });
+    await sendToHost({ action: 'ontology_turn_end', requestId: newRequestId('ont') });
     // eslint-disable-next-line no-catch-all/no-catch-all -- a missed notice only delays expansion to the next turn
   } catch (err) {
     log(`turn end notice not sent: ${err instanceof Error ? err.message : String(err)}`);

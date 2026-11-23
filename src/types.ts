@@ -35,6 +35,10 @@ export interface ContainerConfigRow {
   cli_scope: string; // 'disabled' | 'group' | 'global'
   timezone: string | null; // IANA id; NULL = follow the install-global timezone
   speed: ContainerSpeed | null; // NULL = install/provider default
+  /** 'auto' | 'manual'; NULL = bypass (no per-tool checks). Optional: rows built before the column existed. */
+  permission_mode?: string | null;
+  /** 'off' leaves the group out of the runtime ontology; NULL = on. */
+  ontology?: string | null;
   /**
    * Session isolation tier ('container' | 'vm') — see SessionSpec.runtimeTier.
    * Optional on the TS type because the trunk schema does not carry the

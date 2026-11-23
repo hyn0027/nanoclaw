@@ -257,6 +257,10 @@ export interface ContainerConfig {
   /** Provider-declared speed tier (`standard` or `fast` for Claude); the group value overrides the install default. */
   speed?: ContainerSpeed;
   timezone?: string;
+  /** Claude Code's permission mode for the group's agent; absent = bypass (no per-tool checks). */
+  permissionMode?: PermissionMode;
+  /** `false` leaves the group out of the runtime ontology; absent = on. */
+  ontology?: false;
   /** Session isolation tier for the group's containers; absent = the composer's default ('container'). */
   runtimeTier?: 'container' | 'vm';
 }
@@ -382,8 +386,22 @@ export function configFromDb(row: ContainerConfigRow, group: AgentGroup): Contai
     // A cleared group value falls back to the install-wide default.
     ...speedFields(parseContainerSpeed(row.speed) ?? (FAST_MODE ? 'fast' : undefined)),
     timezone: row.timezone && isValidTimezone(row.timezone) ? row.timezone : undefined,
+    permissionMode: parsePermissionMode(row.permission_mode),
+    ...(row.ontology === 'off' ? { ontology: false as const } : {}),
     runtimeTier: parseRuntimeTier(row.runtime_tier, group.name),
   };
+}
+
+/**
+ * Safeguard baselines for the agent's tool calls (Claude Code permission modes):
+ * 'auto' lets Claude Code's classifier approve or deny each risky call; 'manual' asks an
+ * owner or admin in a DM card. 'bypass' (stored as NULL) runs every call unchecked.
+ */
+export const PERMISSION_MODES = ['bypass', 'auto', 'manual'] as const;
+export type PermissionMode = 'auto' | 'manual';
+
+function parsePermissionMode(value: string | null | undefined): PermissionMode | undefined {
+  return value === 'auto' || value === 'manual' ? value : undefined;
 }
 
 /** The stored tier was validated against the provider's declaration when written; empty means unset. */

@@ -1078,8 +1078,11 @@ export function composeSessionSpec(input: ComposeSessionSpecInput): SessionSpec 
   const env: Record<string, string> = {
     TZ: containerConfig.timezone ?? TIMEZONE,
     ...mailboxEnvironment,
-    // The agent waits for the host's runtime ontology before each turn and skill load.
-    ...(ontologyGateEnabled() ? { NANOCLAW_ONTOLOGY_GATE: '1' } : {}),
+    // The agent waits for the host's runtime ontology before each turn and skill load,
+    // unless the group is left out of it (a baseline for comparison).
+    ...(ontologyGateEnabled() && containerConfig.ontology !== false ? { NANOCLAW_ONTOLOGY_GATE: '1' } : {}),
+    // Claude Code's permission mode for the agent's tool calls (absent = bypass).
+    ...(containerConfig.permissionMode ? { NANOCLAW_PERMISSION_MODE: containerConfig.permissionMode } : {}),
   };
   // The contributed lane (ContainerSpec.contributedEnv): registry-sourced env,
   // exempt from the credential-NAME check and still refused credential VALUES.

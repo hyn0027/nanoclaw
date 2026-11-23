@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import {
   mcpServerPluginOwner,
   parseMcpServerConfig,
+  PERMISSION_MODES,
   validateMcpServerName,
   type AdditionalMountConfig,
   type McpServerConfig,
@@ -89,6 +90,8 @@ function presentConfig(row: ContainerConfigRow): Record<string, unknown> {
     additional_mounts: JSON.parse(row.additional_mounts),
     cli_scope: row.cli_scope,
     timezone: row.timezone,
+    permission_mode: row.permission_mode ?? 'bypass',
+    ontology: row.ontology ?? 'on',
     updated_at: row.updated_at,
   };
 }
@@ -395,7 +398,9 @@ registerResource({
         'Update container config scalar fields. Changes are saved but do NOT take effect until you run `ncl groups restart`. ' +
         'Use --id <group-id> and any of: --provider, --model, --effort, --speed, --image-tag, --assistant-name, --max-messages-per-prompt, --cli-scope, ' +
         '--speed must be one of the speed tiers the group\'s provider declares (Claude: "standard", "fast"), or "" to follow the install default; a provider that declares none accepts only "". ' +
-        '--timezone (IANA id like "Europe/Lisbon"; "" clears back to the install default; scheduled-task times follow it immediately, message display after restart).',
+        '--timezone (IANA id like "Europe/Lisbon"; "" clears back to the install default; scheduled-task times follow it immediately, message display after restart). ' +
+        "--permission-mode bypass|auto|manual (Claude Code permission mode for the agent's tool calls: bypass runs them unchecked, auto lets Claude Code's classifier decide, manual asks an owner or admin in a DM card). " +
+        '--ontology on|off (off leaves the group out of the runtime ontology: no gate, policy groups or questions).',
       handler: async (args) => {
         const id = args.id as string;
         if (!id) throw new Error('--id is required');
@@ -414,6 +419,8 @@ registerResource({
             | 'max_messages_per_prompt'
             | 'cli_scope'
             | 'timezone'
+            | 'permission_mode'
+            | 'ontology'
           >
         > = {};
         if (args.provider !== undefined) updates.provider = args.provider as string;
@@ -441,9 +448,22 @@ registerResource({
           updates.cli_scope = scope;
         }
 
+        const permissionMode = (args['permission-mode'] ?? args.permission_mode) as string | undefined;
+        if (permissionMode !== undefined) {
+          if (!(PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
+            throw new Error(`--permission-mode must be one of: ${PERMISSION_MODES.join(', ')}`);
+          }
+          updates.permission_mode = permissionMode === 'bypass' ? null : permissionMode;
+        }
+        if (args.ontology !== undefined) {
+          const ontology = args.ontology as string;
+          if (!['on', 'off'].includes(ontology)) throw new Error('--ontology must be one of: on, off');
+          updates.ontology = ontology === 'off' ? 'off' : null;
+        }
+
         if (Object.keys(updates).length === 0) {
           throw new Error(
-            'Nothing to update — provide at least one of: --provider, --model, --effort, --speed, --image-tag, --assistant-name, --max-messages-per-prompt, --cli-scope, --timezone',
+            'Nothing to update — provide at least one of: --provider, --model, --effort, --speed, --image-tag, --assistant-name, --max-messages-per-prompt, --cli-scope, --timezone, --permission-mode, --ontology',
           );
         }
 

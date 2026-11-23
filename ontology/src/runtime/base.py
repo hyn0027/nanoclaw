@@ -26,7 +26,11 @@ def central(sql: str, *params) -> list[dict]:
 
 
 def active_sessions() -> list[dict]:
-    return central("SELECT id, agent_group_id, created_at, container_status FROM sessions WHERE status = 'active' ORDER BY created_at")
+    """Active sessions of the agent groups in the runtime ontology (a group set to
+    ``--ontology off`` is a baseline for comparison: no policies, questions or expansions)."""
+    return central("SELECT s.id, s.agent_group_id, s.created_at, s.container_status FROM sessions s "
+                   "LEFT JOIN container_configs c ON c.agent_group_id = s.agent_group_id "
+                   "WHERE s.status = 'active' AND coalesce(c.ontology, 'on') != 'off' ORDER BY s.created_at")
 
 
 def latest_session() -> dict | None:

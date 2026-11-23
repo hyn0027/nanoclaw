@@ -307,6 +307,7 @@ This project uses pnpm with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspac
 | [docs/hardened-image.md](docs/hardened-image.md) | Opt-in: pull the agent image from a registry instead of building it |
 | [docs/action-log.md](docs/action-log.md) | Per-session agent action log: what's recorded, how, limitations |
 | [docs/ontology-runtime.md](docs/ontology-runtime.md) | Per-session runtime ontology (`ontology/`, `src/modules/ontology-runtime/`): grows from skill/MCP/package changes and gateway-captured traffic |
+| [docs/permission-modes.md](docs/permission-modes.md) | Per-group baselines: Claude Code permission mode (`bypass` / `auto` / `manual`) and `--ontology on` / `off` |
 
 ## Container Build Cache
 

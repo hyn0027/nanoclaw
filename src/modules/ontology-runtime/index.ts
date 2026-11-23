@@ -28,7 +28,9 @@
  * Questions to the operator (questions.ts) are delivered on a short loop of their own.
  *
  * Disabled with NANOCLAW_ONTOLOGY_RUNTIME=false, or when ontology/.venv is missing; then
- * containers are started without NANOCLAW_ONTOLOGY_GATE and never ask.
+ * containers are started without NANOCLAW_ONTOLOGY_GATE and never ask. One agent group is
+ * left out with `ncl groups config update --ontology off` (a baseline for comparison): its
+ * containers never ask, and the Python side skips its sessions.
  */
 import { execFile, spawn } from 'child_process';
 import crypto from 'crypto';
@@ -200,8 +202,14 @@ async function reply(session: Session, requestId: string, error: string | null):
   });
 }
 
+/** The group is left out of the runtime ontology (`--ontology off`). */
+async function ontologyOff(session: Session): Promise<boolean> {
+  return (await getContainerConfig(session.agent_group_id))?.ontology === 'off';
+}
+
 async function handleSync(session: Session, requestId: string, reason: string, skill: string | null): Promise<void> {
-  if (!running) return reply(session, requestId, null); // runtime off: never hold the agent
+  // Runtime off, or the group is left out of it: never hold the agent.
+  if (!running || (await ontologyOff(session))) return reply(session, requestId, null);
   const started = Date.now();
   // An unchanged setup answers at once, without queueing behind a background expansion.
   if (reason === 'turn' && synced.get(session.id) === (await setupFingerprint(session.agent_group_id))) {
@@ -263,7 +271,7 @@ registerDeliveryAction(
 registerDeliveryAction(
   'ontology_turn_end',
   async (_content, session) => {
-    if (!running || trafficQueued.has(session.id)) return;
+    if (!running || trafficQueued.has(session.id) || (await ontologyOff(session))) return;
     trafficQueued.add(session.id);
     void enqueue(session.id, () => {
       trafficQueued.delete(session.id);
