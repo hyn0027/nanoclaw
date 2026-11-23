@@ -86,8 +86,7 @@ def main() -> None:
     nanoclaw = args.nanoclaw or pinned_repo
     facts = collect(nanoclaw, args.session)
     # Only skills the agent has ever loaded (the action log shows it invoked them) are
-    # materialized, unless --all-skills. FUTURE WORK: assumes a single agent for now;
-    # "ever loaded" will later be tracked per agent.
+    # materialized, unless --all-skills. Per agent: only this agent group's own sessions count.
     from ..runtime.policies import skills_ever_loaded
     session = facts["session"]
     facts["loaded_skills"] = skills_ever_loaded(session["agent_group_id"], session["id"] if args.skills_loaded_in == "session" else None)

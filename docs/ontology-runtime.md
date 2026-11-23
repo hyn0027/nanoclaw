@@ -29,13 +29,32 @@ unknown kind, instance, or effect type is dropped and listed as rejected.
   response with `set-cookie` dropped and gzip decoded; secret-named JSON and form values are
   masked; Vercel environment-variable values are withheld. `api.anthropic.com` and
   `*.datadoghq.com` are not recorded (`GATEWAY_CAPTURE_EXCLUDE`). Bodies are capped at 1 MiB.
-- **Host module** (`src/modules/ontology-runtime/`). Every 15 s it fingerprints the active
-  sessions, their container configs, the groups' Claude settings, `container/skills/`, the
-  capture files, answers to open questions, and a digest of OneCLI's credential grants and
-  secrets (ids and timestamps from its Postgres, never values). When the fingerprint changes and holds still for one poll (or after 2 minutes
-  of steady change) it runs one `tick`. Output: `logs/ontology-runtime/runtime.log`. Off with
-  `NANOCLAW_ONTOLOGY_RUNTIME=false`, or when `ontology/.venv` is missing.
-- **Runtime** (`ontology/src/runtime/`, Python). `tick` routes new captured calls to the active
+- **The agent waits** (`container/agent-runner/src/ontology-gate.ts`). Nothing polls for
+  changes; the agent's container asks the host and waits for the answer:
+  - before every turn (a new batch, or a follow-up pushed into an open query): when the
+    agent group's setup (container config: skills, MCP servers, packages; Claude settings;
+    `container/skills/`; OneCLI credential grants) is unchanged since the session's last
+    sync, the host answers at once. Otherwise it runs `ontology_runtime.py sync --session`:
+    base changes, the operator's answers (it waits for them, however long), expansions for
+    new sources, and the agent's OneCLI policy groups. An approved MCP server or package
+    restarts the container, so its first turn is where that change is synced;
+  - before the agent loads a skill (the Skill tool, or a Read of a `SKILL.md`; once per skill
+    per container): `sync --skill`, which also makes and switches on the skill's policy group;
+  - after every turn (nobody waits): `sync --traffic` expands from the calls the turn made.
+
+  A sync that fails is refused (fail closed): the turn is not run and the user is told why,
+  or the Skill call is blocked with the reason. While waiting the container touches its
+  heartbeat, so the stuck-container sweep leaves it alone, and re-sends the request every
+  5 minutes in case the host restarted. A skill loaded some other way (e.g. `cat SKILL.md`
+  in Bash) is picked up from the action log by the end-of-turn sync, without blocking.
+- **Host module** (`src/modules/ontology-runtime/`). Answers the container's `ontology_sync`
+  and `ontology_turn_end` messages (one Python run at a time per session), delivers the
+  runtime's questions as DM cards (a 3 s loop), and starts containers with
+  `NANOCLAW_ONTOLOGY_GATE=1` so they wait. Policy groups no session needs any more are
+  switched off by the next sync of any session and once at host start. Output:
+  `logs/ontology-runtime/runtime.log`. Off with `NANOCLAW_ONTOLOGY_RUNTIME=false`, or when
+  `ontology/.venv` is missing (containers then never wait).
+- **Runtime** (`ontology/src/runtime/`, Python). `sync` is what the host runs (above); `tick` (by hand) routes new captured calls to the active
   sessions of the agent group they came from, records base changes, and expands.
 
 ## State and resuming
@@ -79,11 +98,25 @@ source (`default`: the model API) are always on. The rest follow the active sess
 Groups and the state of the last reconcile: `data/ontology-runtime/policies.json`; skills each
 session loaded: `<session>/ontology/loads.json`. Code: `ontology/src/runtime/policies.py`.
 
-**Future work (single-agent assumption):** materialize includes only skills the agent has ever
-loaded, read from all of its group's sessions; this assumes one agent for now and will later be
-tracked per agent. Likewise, Cedar policies are workspace-wide, so a group switched on for one agent is
-on for every agent in the workspace (fine for this single-agent prototype). The intended next
-step is per-agent policies: groups whose policies name the agent as principal, switched per agent.
+**Per agent.** An agent is a NanoClaw agent group, and OneCLI gives each its own identity
+(`OneCLI::Agent`). OneCLI has two layers: the workspace layer (groups naming no single agent, e.g.
+`default`; each can be switched off per agent) is the operator's and is never touched by the
+runtime. The runtime only derives the agent layer:
+
+- a *template* holds a skill's or MCP server's policies for any principal. It lives in NanoClaw,
+  not OneCLI: `data/ontology-runtime/policy-templates/<kind>-<name>.json`. Every policy is checked
+  by OneCLI's validator before the file is saved. Edit a file to change every agent's copy;
+- an *agent copy* is the only thing created in OneCLI (source `<template source>@<agent-group-id>`,
+  name `<template name>:<agent-group-id>`): the template's policies with the principal narrowed to
+  that agent (`principal == OneCLI::Agent::"<uuid>"`), on only while that agent needs it, and shown
+  on that agent's Policies page;
+- a copy without a template is kept and used as is (a group for that agent only); a template is
+  made only for an agent that has no copy yet. Templates found in OneCLI (from before) are moved
+  out to files automatically.
+
+So one agent loading a skill opens nothing for another agent. Likewise, "ever loaded" (which
+skills materialize includes) is read only from the agent group's own sessions. A copy is made
+only once the agent has a OneCLI identity (after its first request through the gateway).
 
 ## Questions to the operator
 

@@ -1,138 +1,82 @@
 /**
- * Ontology-runtime module — keeps each session's ontology current.
+ * Ontology-runtime module — keeps each session's ontology current, driven by the agent.
  *
- * Every session has a runtime ontology (ontology/src/runtime, Python) that starts
- * from the base model in ontology/ and grows by expansions when:
- *   - the session's agent group gains a skill, MCP server, or package (or the skill
- *     text changes, or Claude Code's bundled skills are switched on);
- *   - the OneCLI gateway records new calls for the agent (GATEWAY_CAPTURE_DIR,
- *     mounted from data/onecli-capture/);
- *   - a OneCLI credential grant or secret is added or changed (a digest of ids and
- *     timestamps read from OneCLI's Postgres, never values).
+ * Every session has a runtime ontology (ontology/src/runtime, Python) that starts from
+ * the base model in ontology/ and grows by expansions. Nothing here polls for changes:
+ * the agent's container asks (container/agent-runner/src/ontology-gate.ts) and waits.
  *
- * This module only decides WHEN to run: every POLL_MS it fingerprints those inputs
- * (cheap stat calls and a config read) and, once a change has held still for one
- * poll — or MAX_WAIT_MS after it was first seen, so a steady stream of calls is
- * still batched — runs `ontology/.venv/bin/python ontology_runtime.py tick`. One
- * tick at a time; output goes to logs/ontology-runtime/runtime.log. The tick itself
- * is resumable (state per session, cursor over the capture files), so a skipped or
- * killed run only delays the next one.
+ *   - `ontology_sync` reason "turn", before every turn: when the agent group's setup
+ *     (container config: skills, MCP servers, packages; Claude settings; the installed
+ *     container skills; OneCLI credential grants) is unchanged since the session's last
+ *     sync, the answer is immediate. Otherwise `ontology_runtime.py sync --session` runs:
+ *     base changes, the operator's answers (it waits for them), expansions for new
+ *     sources, and the agent's OneCLI policy groups. An approved MCP server or package
+ *     restarts the container, so its first turn is where that change is synced.
+ *   - `ontology_sync` reason "skill", before the agent loads a skill: the same sync with
+ *     `--skill`, which also makes and switches on that skill's policy group.
+ *   - `ontology_turn_end`, after every turn (nobody waits): `sync --traffic` expands from
+ *     the calls the gateway recorded for the turn.
  *
- * It also delivers the runtime's questions to the operator (questions.ts): facts it
- * cannot observe, such as a token's scope, asked as DM button cards; and it switches
- * OneCLI policy groups within seconds of the agent loading a skill (watchSkills ->
- * `ontology_runtime.py policies`, see ontology/src/runtime/policies.py). Every tick
- * also reconciles the groups (sessions closed, MCP servers added or removed).
+ * A sync that fails answers `ok: false` and the agent's action is refused (fail closed).
+ * One sync runs at a time per session; output goes to logs/ontology-runtime/runtime.log.
+ * Policy groups no session needs any more are switched off by the next sync of any
+ * session (every turn end runs one) and once at host start.
+ * Questions to the operator (questions.ts) are delivered on a short loop of their own.
  *
- * Disabled with NANOCLAW_ONTOLOGY_RUNTIME=false, or when ontology/.venv is missing.
+ * Disabled with NANOCLAW_ONTOLOGY_RUNTIME=false, or when ontology/.venv is missing; then
+ * containers are started without NANOCLAW_ONTOLOGY_GATE and never ask.
  */
-import { execFile, spawn, type ChildProcess } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { DATA_DIR, SESSION_LOGS_DIR } from '../../config.js';
+import { DATA_DIR } from '../../config.js';
 import { CONTAINER_RUNTIME_BIN } from '../../container-runtime.js';
-import { getAllContainerConfigs } from '../../db/container-configs.js';
-import { getActiveSessions, getRunningSessions } from '../../db/sessions.js';
+import { getContainerConfig } from '../../db/container-configs.js';
+import { registerDeliveryAction } from '../../delivery.js';
+import { unguarded } from '../../guard/index.js';
 import { onHostShutdown, onHostStart } from '../../host-lifecycle.js';
 import { log } from '../../log.js';
+import { writeSessionMessage } from '../../session-manager.js';
+import type { Session } from '../../types.js';
 
+import { setOntologyGate } from './gate.js';
 import { deliverQuestions } from './questions.js';
 
-const POLL_MS = 15_000;
-const MAX_WAIT_MS = 120_000;
-const TICK_TIMEOUT_MS = 30 * 60_000;
+const QUESTION_POLL_MS = 3_000;
 
 const ROOT = process.cwd();
 const ONTOLOGY_DIR = path.join(ROOT, 'ontology');
 const PYTHON = path.join(ONTOLOGY_DIR, '.venv', 'bin', 'python');
 const ENTRY = path.join(ONTOLOGY_DIR, 'ontology_runtime.py');
-const CAPTURE_DIR = process.env.NANOCLAW_CAPTURE_DIR || path.join(DATA_DIR, 'onecli-capture');
 const SKILLS_DIR = path.join(ROOT, 'container', 'skills');
 const LOG_DIR = path.join(ROOT, 'logs', 'ontology-runtime');
-const RUNTIME_DIR = path.join(DATA_DIR, 'ontology-runtime');
 
 let running = false;
-let timer: NodeJS.Timeout | null = null;
-let child: ChildProcess | null = null;
-let processed = ''; // fingerprint the last successful tick started from
-let seen = ''; // fingerprint at the previous poll
-let changedSince = 0;
+let questionTimer: NodeJS.Timeout | null = null;
+const children = new Set<ReturnType<typeof spawn>>();
 
-// ── policy groups follow loaded skills ─────────────────────────────────────
-// The action log (src/modules/action-log) is exported about once a second. When a
-// running session's log gains a Skill call (or a read of a SKILL.md), switch OneCLI
-// policy groups right away instead of waiting for the next tick.
-const SKILL_WATCH_MS = 2_000;
-const logOffsets = new Map<string, number>();
-let hostStartedAt = Date.now();
-let skillTimer: NodeJS.Timeout | null = null;
-let policyChild: ChildProcess | null = null;
-let policyAgain = false;
+/** Per session: the setup fingerprint its last successful sync covered. */
+const synced = new Map<string, string>();
+/** Per session: the tail of its queue (one Python run at a time per session). */
+const queues = new Map<string, Promise<unknown>>();
+/** Requests being handled (a container re-sends while it waits). */
+const inFlight = new Set<string>();
+/** Sessions with a traffic expansion queued but not started. */
+const trafficQueued = new Set<string>();
 
-function runPolicies(): void {
-  if (policyChild) {
-    policyAgain = true;
-    return;
-  }
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-  const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
-  const env = { ...process.env, PATH: `${process.env.PATH ?? ''}:${path.join(os.homedir(), '.local', 'bin')}` };
-  policyChild = spawn(PYTHON, [ENTRY, 'policies'], { cwd: ONTOLOGY_DIR, env, stdio: ['ignore', out, out] });
-  const kill = setTimeout(() => policyChild?.kill('SIGTERM'), TICK_TIMEOUT_MS);
-  policyChild.on('exit', (code) => {
-    clearTimeout(kill);
-    fs.closeSync(out);
-    policyChild = null;
-    if (code !== 0) log.warn('Ontology policy switch failed', { code, log: path.join(LOG_DIR, 'runtime.log') });
-    if (policyAgain) {
-      policyAgain = false;
-      runPolicies();
-    }
-  });
-  policyChild.on('error', (err) => log.warn('Ontology policy switch could not start', { err }));
+function enqueue<T>(sessionId: string, job: () => Promise<T>): Promise<T> {
+  const next = (queues.get(sessionId) ?? Promise.resolve()).then(job, job);
+  queues.set(
+    sessionId,
+    next.catch(() => undefined),
+  );
+  return next;
 }
 
-/** New bytes of each running session's action log; true when one of them loads a skill. */
-async function skillLoaded(): Promise<boolean> {
-  let loaded = false;
-  for (const s of await getRunningSessions()) {
-    const file = path.join(SESSION_LOGS_DIR, s.agent_group_id, s.id, 'actions.jsonl');
-    let size: number;
-    let mtime: number;
-    try {
-      ({ size, mtimeMs: mtime } = fs.statSync(file));
-      // eslint-disable-next-line no-catch-all/no-catch-all -- no action log yet
-    } catch {
-      continue;
-    }
-    // First sight of a log written before this host started: its history is the tick's
-    // job (policies.reconcile reads every log). A log started since: read it all.
-    const from = logOffsets.get(file) ?? (mtime > hostStartedAt ? 0 : size);
-    logOffsets.set(file, size);
-    if (size <= from) continue;
-    const fd = fs.openSync(file, 'r');
-    const buf = Buffer.alloc(size - from);
-    fs.readSync(fd, buf, 0, buf.length, from);
-    fs.closeSync(fd);
-    const text = buf.toString('utf8');
-    if (text.includes('"tool":"Skill"') || text.includes('SKILL.md')) loaded = true;
-  }
-  return loaded;
-}
-
-async function watchSkills(): Promise<void> {
-  if (!running) return;
-  try {
-    if (await skillLoaded()) runPolicies();
-    // eslint-disable-next-line no-catch-all/no-catch-all -- retried on the next watch
-  } catch (err) {
-    log.warn('Ontology skill watch error', { err });
-  }
-  if (running) skillTimer = setTimeout(() => void watchSkills(), SKILL_WATCH_MS);
-}
+// ── the agent group's setup, fingerprinted ────────────────────────────────
 
 function statLine(p: string): string {
   try {
@@ -144,14 +88,13 @@ function statLine(p: string): string {
   }
 }
 
-function listing(dir: string, filter: (name: string) => boolean = () => true): string[] {
+function skillsListing(): string[] {
   try {
     return fs
-      .readdirSync(dir)
-      .filter(filter)
+      .readdirSync(SKILLS_DIR)
       .sort()
-      .map((n) => statLine(path.join(dir, n)));
-    // eslint-disable-next-line no-catch-all/no-catch-all -- a missing directory lists as empty
+      .flatMap((n) => [statLine(path.join(SKILLS_DIR, n)), statLine(path.join(SKILLS_DIR, n, 'SKILL.md'))]);
+    // eslint-disable-next-line no-catch-all/no-catch-all -- no skills directory lists as empty
   } catch {
     return [];
   }
@@ -181,84 +124,132 @@ function onecliGrants(): Promise<string> {
         GRANTS_DIGEST_SQL,
       ],
       { timeout: 10_000 },
-      (err, stdout) => resolve(err ? 'onecli:unreadable' : `onecli:${stdout.trim()}`),
+      (err, stdout) => resolve(err ? `onecli:unreadable:${Date.now()}` : `onecli:${stdout.trim()}`),
     );
   });
 }
 
-/** Everything a tick reacts to, hashed. */
-async function fingerprint(): Promise<string> {
-  const sessions = await getActiveSessions();
-  const groups = [...new Set(sessions.map((s) => s.agent_group_id))].sort();
-  const configs = (await getAllContainerConfigs()).filter((c) => groups.includes(c.agent_group_id));
+/** What a sync of this agent group depends on, hashed (cheap: a config read, stats, one query). */
+async function setupFingerprint(agentGroupId: string): Promise<string> {
   const parts = [
-    ...sessions.map((s) => s.id).sort(),
-    ...configs.map((c) => JSON.stringify(c)).sort(),
-    ...groups.map((g) => statLine(path.join(DATA_DIR, 'v2-sessions', g, '.claude-shared', 'settings.json'))),
-    ...listing(SKILLS_DIR).flatMap((d) => [d, statLine(path.join(d.split(':')[0], 'SKILL.md'))]),
-    ...listing(CAPTURE_DIR, (n) => n.endsWith('.jsonl')),
-    // an answer (chat or terminal) lets a held session expand, and a tick applies it
-    ...listing(path.join(RUNTIME_DIR, 'answers'), (n) => n.endsWith('.json')),
+    JSON.stringify((await getContainerConfig(agentGroupId)) ?? null),
+    statLine(path.join(DATA_DIR, 'v2-sessions', agentGroupId, '.claude-shared', 'settings.json')),
+    ...skillsListing(),
     await onecliGrants(),
   ];
   return crypto.createHash('sha256').update(parts.join('\n')).digest('hex');
 }
 
-function runTick(startedFrom: string): void {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-  const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
-  const env = { ...process.env, PATH: `${process.env.PATH ?? ''}:${path.join(os.homedir(), '.local', 'bin')}` };
-  const started = Date.now();
-  child = spawn(PYTHON, [ENTRY, 'tick'], { cwd: ONTOLOGY_DIR, env, stdio: ['ignore', out, out] });
-  const kill = setTimeout(() => child?.kill('SIGTERM'), TICK_TIMEOUT_MS);
-  child.on('exit', (code, signal) => {
-    clearTimeout(kill);
-    fs.closeSync(out);
-    child = null;
-    if (code === 0) {
-      processed = startedFrom;
-      log.info('Ontology runtime tick done', { ms: Date.now() - started });
-    } else {
-      log.warn('Ontology runtime tick failed; retried on the next change', {
-        code,
-        signal,
-        log: path.join(LOG_DIR, 'runtime.log'),
-      });
-      processed = ''; // retry
-    }
+// ── running the Python runtime ─────────────────────────────────────────────
+
+/** Run `ontology_runtime.py sync ...`; resolves with the failure reason, or null on success. */
+function runSync(args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
+    const env = { ...process.env, PATH: `${process.env.PATH ?? ''}:${path.join(os.homedir(), '.local', 'bin')}` };
+    const child = spawn(PYTHON, [ENTRY, 'sync', ...args], { cwd: ONTOLOGY_DIR, env, stdio: ['ignore', out, 'pipe'] });
+    children.add(child);
+    let failure = '';
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf8');
+      fs.appendFileSync(path.join(LOG_DIR, 'runtime.log'), text);
+      const m = /SYNC FAILED: (.*)/.exec(text);
+      if (m) failure = m[1].trim();
+    });
+    child.on('error', (err) => {
+      children.delete(child);
+      fs.closeSync(out);
+      resolve(`could not start the ontology runtime: ${err.message}`);
+    });
+    child.on('exit', (code, signal) => {
+      children.delete(child);
+      fs.closeSync(out);
+      if (code === 0) resolve(null);
+      else
+        resolve(
+          failure || `ontology sync exited with ${signal ?? `code ${code}`} (see logs/ontology-runtime/runtime.log)`,
+        );
+    });
   });
-  child.on('error', (err) => log.warn('Ontology runtime tick could not start', { err }));
 }
 
-async function poll(): Promise<void> {
+async function reply(session: Session, requestId: string, error: string | null): Promise<void> {
+  await writeSessionMessage(session.agent_group_id, session.id, {
+    id: `ontology-resp-${requestId}`,
+    kind: 'system',
+    timestamp: new Date().toISOString(),
+    content: JSON.stringify({
+      type: 'ontology_response',
+      requestId,
+      frame: error ? { ok: false, error } : { ok: true },
+    }),
+    trigger: false,
+  });
+}
+
+async function handleSync(session: Session, requestId: string, reason: string, skill: string | null): Promise<void> {
+  if (!running) return reply(session, requestId, null); // runtime off: never hold the agent
+  const started = Date.now();
+  const error = await enqueue(session.id, async () => {
+    if (reason === 'skill' && skill) {
+      return runSync(['--session', session.id, '--skill', skill]);
+    }
+    const before = await setupFingerprint(session.agent_group_id);
+    if (synced.get(session.id) === before) return null;
+    const failed = await runSync(['--session', session.id]);
+    if (!failed) synced.set(session.id, before);
+    return failed;
+  });
+  await reply(session, requestId, error);
+  const ms = Date.now() - started;
+  if (error)
+    log.warn('Ontology sync failed; the agent action is refused', { sessionId: session.id, reason, skill, error });
+  else if (ms > 2_000) log.info('Ontology sync done', { sessionId: session.id, reason, skill, ms });
+}
+
+registerDeliveryAction(
+  'ontology_sync',
+  async (content, session) => {
+    const requestId = typeof content.requestId === 'string' ? content.requestId : '';
+    if (!requestId || inFlight.has(requestId)) return;
+    inFlight.add(requestId);
+    const reason = content.reason === 'skill' ? 'skill' : 'turn';
+    const skill =
+      typeof content.skill === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(content.skill) ? content.skill : null;
+    // Runs in the background: the delivery poll must not wait (a sync may wait for the operator).
+    void handleSync(session, requestId, reason, skill)
+      .catch((err) => log.warn('Ontology sync error', { sessionId: session.id, err }))
+      .finally(() => inFlight.delete(requestId));
+  },
+  unguarded('read-only for the agent: syncs the host-side ontology and answers ok/refused'),
+);
+
+registerDeliveryAction(
+  'ontology_turn_end',
+  async (_content, session) => {
+    if (!running || trafficQueued.has(session.id)) return;
+    trafficQueued.add(session.id);
+    void enqueue(session.id, () => {
+      trafficQueued.delete(session.id);
+      return runSync(['--session', session.id, '--traffic']);
+    }).then((error) => {
+      if (error)
+        log.warn('Ontology traffic expansion failed; retried after the next turn', { sessionId: session.id, error });
+    });
+  },
+  unguarded("notice only: expands the host-side ontology from the turn's recorded calls"),
+);
+
+async function pollQuestions(): Promise<void> {
   if (!running) return;
   try {
     await deliverQuestions();
-    // eslint-disable-next-line no-catch-all/no-catch-all -- a failed card is retried on the next poll
+    // eslint-disable-next-line no-catch-all/no-catch-all -- a failed card is retried on the next round
   } catch (err) {
     log.warn('Ontology question delivery failed', { err });
   }
-  try {
-    if (!child) {
-      const fp = await fingerprint();
-      const now = Date.now();
-      if (fp !== processed) {
-        if (fp !== seen) changedSince = changedSince || now;
-        const settled = fp === seen;
-        if (settled || now - changedSince >= MAX_WAIT_MS) {
-          changedSince = 0;
-          runTick(fp);
-        }
-      } else {
-        changedSince = 0;
-      }
-      seen = fp;
-    }
-    // eslint-disable-next-line no-catch-all/no-catch-all -- the runtime ontology must never affect the host; next poll retries
-  } catch (err) {
-    log.warn('Ontology runtime poll error', { err });
-  }
-  if (running) timer = setTimeout(() => void poll(), POLL_MS);
+  if (running) questionTimer = setTimeout(() => void pollQuestions(), QUESTION_POLL_MS);
 }
 
 onHostStart(() => {
@@ -268,19 +259,26 @@ onHostStart(() => {
     return;
   }
   running = true;
-  hostStartedAt = Date.now();
-  void poll();
-  void watchSkills();
-  log.info('Ontology runtime started', { capture: CAPTURE_DIR, log: path.join(LOG_DIR, 'runtime.log') });
+  setOntologyGate(true);
+  void pollQuestions();
+  // Once at start: switch off policy groups no active session needs any more (sessions
+  // closed while the host was down). Every sync reconciles them again.
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+  const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
+  const reconcile = spawn(PYTHON, [ENTRY, 'policies', '--no-generate'], {
+    cwd: ONTOLOGY_DIR,
+    stdio: ['ignore', out, out],
+  });
+  reconcile.on('exit', () => fs.closeSync(out));
+  reconcile.on('error', (err) => log.warn('Ontology policy reconcile could not start', { err }));
+  log.info('Ontology runtime started (agent-driven sync)', { log: path.join(LOG_DIR, 'runtime.log') });
 });
 
 onHostShutdown(() => {
   running = false;
-  if (timer) clearTimeout(timer);
-  timer = null;
-  if (skillTimer) clearTimeout(skillTimer);
-  skillTimer = null;
-  policyChild?.kill('SIGTERM');
-  // A tick is resumable: stop it rather than hold up shutdown.
-  child?.kill('SIGTERM');
+  setOntologyGate(false);
+  if (questionTimer) clearTimeout(questionTimer);
+  questionTimer = null;
+  // Syncs are resumable; a waiting container re-sends its request after a restart.
+  for (const child of children) child.kill('SIGTERM');
 });

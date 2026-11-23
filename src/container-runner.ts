@@ -84,7 +84,12 @@ import {
 } from './session-manager.js';
 import type { AgentGroup, Session } from './types.js';
 import { invalidSpec, packageName } from './modules/self-mod/packages.js';
-import { describeInstalled, recordInstalledPackages, type PackageBuildRecord } from './modules/self-mod/package-lock.js';
+import { ontologyGateEnabled } from './modules/ontology-runtime/gate.js';
+import {
+  describeInstalled,
+  recordInstalledPackages,
+  type PackageBuildRecord,
+} from './modules/self-mod/package-lock.js';
 
 /**
  * Docker defaults /dev/shm to 64m, which silently short-writes past that size.
@@ -1073,6 +1078,8 @@ export function composeSessionSpec(input: ComposeSessionSpecInput): SessionSpec 
   const env: Record<string, string> = {
     TZ: containerConfig.timezone ?? TIMEZONE,
     ...mailboxEnvironment,
+    // The agent waits for the host's runtime ontology before each turn and skill load.
+    ...(ontologyGateEnabled() ? { NANOCLAW_ONTOLOGY_GATE: '1' } : {}),
   };
   // The contributed lane (ContainerSpec.contributedEnv): registry-sourced env,
   // exempt from the credential-NAME check and still refused credential VALUES.
@@ -1278,7 +1285,10 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<Packag
   }
 
   // Specs go into RUN lines verbatim: refuse any that is not a name or an exact pin.
-  const badSpec = [...aptPackages.map((p) => invalidSpec('apt', p)), ...npmPackages.map((p) => invalidSpec('npm', p))].find(Boolean);
+  const badSpec = [
+    ...aptPackages.map((p) => invalidSpec('apt', p)),
+    ...npmPackages.map((p) => invalidSpec('npm', p)),
+  ].find(Boolean);
   if (badSpec) throw new Error(`refusing to build image: ${badSpec}`);
   let dockerfile = `FROM ${CONTAINER_IMAGE}\nUSER root\n`;
   if (aptPackages.length > 0) {
@@ -1335,7 +1345,8 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<Packag
     apt: aptPackages,
     npm: npmPackages,
   });
-  if (record.error) log.warn('Could not read installed package versions from the image', { agentGroupId, err: record.error });
+  if (record.error)
+    log.warn('Could not read installed package versions from the image', { agentGroupId, err: record.error });
   log.info('Per-agent-group image built', { agentGroupId, imageTag, installed: describeInstalled(record) });
   return record;
 }

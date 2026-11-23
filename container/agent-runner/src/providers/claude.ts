@@ -21,6 +21,7 @@ import {
 import { archiveClaudeTranscript, rotateClaudeContinuation } from './claude-history.js';
 import { registerProvider } from './provider-registry.js';
 import type { AgentProvider, AgentQuery, ProviderEvent, ProviderOptions, QueryInput } from './types.js';
+import { notifyTurnEnd, skillOfToolCall, syncBeforeSkill } from '../ontology-gate.js';
 
 function log(msg: string): void {
   console.error(`[claude-provider] ${msg}`);
@@ -142,6 +143,24 @@ const preToolUseHook: HookCallback = async (input) => {
       decision: 'block',
       stopReason: `Tool '${toolName}' is not available in this environment — use the nanoclaw equivalent.`,
     } as unknown as ReturnType<HookCallback>;
+  }
+  // Loading a skill waits for the host's ontology sync (its OneCLI policy group,
+  // and its graph if it has no reviewed one); a failed sync refuses the load.
+  const skill = skillOfToolCall(toolName, i.tool_input);
+  if (skill) {
+    const gate = await syncBeforeSkill(skill);
+    if (!gate.ok) {
+      recordAction({
+        event: 'tool_blocked',
+        toolUseId: i.tool_use_id,
+        agentId: i.agent_id,
+        data: { tool: toolName, skill, reason: gate.error },
+      });
+      return {
+        decision: 'block',
+        stopReason: `Skill '${skill}' is not available yet: the environment's policy update failed (${gate.error ?? 'unknown error'}). Tell the user; do not work around it.`,
+      } as unknown as ReturnType<HookCallback>;
+    }
   }
   // Bash exposes its timeout via the tool_input.timeout field (ms). Any other
   // tool: no declared timeout.
@@ -407,6 +426,7 @@ export class ClaudeProvider implements AgentProvider {
             total_cost_usd?: number;
             usage?: unknown;
           };
+          void notifyTurnEnd();
           recordAction({
             event: 'turn_end',
             data: {

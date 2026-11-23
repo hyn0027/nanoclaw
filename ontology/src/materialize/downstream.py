@@ -7,14 +7,13 @@ and follows the environment graph, up to MAX_STEPS steps:
   ar:onEffectType is the effect: the environment itself causes ar:effectType on
   ar:affectsKind (e.g. a created commit starts a workflow run);
 - containment down: Delete on a kind deletes the kinds it contains, and so on;
-- containment up (one level, final): Create, Update, Delete, or Execute on a kind
-  updates the contents of the kinds that directly contain it (ar:containsKind),
-  e.g. a new issue updates its repository; this does not propagate further;
+- no containment up: a kind is not affected only because something it contains is
+  (a new issue does not count as an effect on its repository);
 - references (on Delete, final): deleting a kind affects the kinds that refer to
   it (ar:referencesKind and its sub-properties), e.g. a deleted label or branch
   leaves dangling references in issues or pull requests.
 
-Triggers and deletions chain; the other two end where they apply.
+Triggers and deletions chain; references end where they apply.
 
 Reads are included as starting effects; they propagate only through reactions the
 model declares for them. Transmissions are not followed. For each influenced
@@ -73,9 +72,6 @@ def steps(snap: Snapshot, kind: URIRef, effect: str) -> list[tuple[URIRef, str, 
         for prop in REFERENCE_PROPS:
             for referrer in sorted(set(m.subjects(prop, kind)) - {kind}, key=short):
                 out.append((referrer, "Update", f"referenced by ({short(prop)}): dangling reference", True, None))
-    if effect in {"Create", "Update", "Delete", "Execute"}:
-        for container in sorted(set(m.subjects(AR.containsKind, kind)), key=short):
-            out.append((container, "Update", "contents of", True, None))
     return out
 
 

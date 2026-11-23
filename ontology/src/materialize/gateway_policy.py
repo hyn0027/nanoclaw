@@ -124,7 +124,10 @@ def read_gateway_policy() -> dict | None:
 GROUPED_POLICIES = """
 select coalesce(json_agg(json_build_object(
     'name', g.name || '/' || c.name, 'group', g.name, 'groupSource', g.source, 'description', c.description,
-    'text', c.policy_text, 'enabled', c.enabled and g.enabled, 'workspaceId', c.workspace_id)
+    'text', c.policy_text, 'enabled', c.enabled and g.enabled, 'workspaceId', c.workspace_id,
+    -- Two-layer policies (OneCLI local migration 20261113000000): agents that do not use
+    -- this workspace-wide group. Read via to_jsonb so older databases without the column work.
+    'excludedAgentIds', coalesce(to_jsonb(g) -> 'excluded_agent_ids', '[]'::jsonb))
   order by g.position, g.created_at, c.position, c.created_at), '[]'::json)
 from cedar_policy_rules c join cedar_policy_groups g on g.id = c.group_id;
 """
@@ -366,6 +369,8 @@ def agent_record(policy: dict | None, agent_id: str | None) -> dict | None:
 
 def applies_to(p: dict, agent: dict) -> bool:
     sc = p["scope"]
+    if agent["id"] in (p.get("excludedAgentIds") or []):
+        return False  # switched off for this agent (the gateway enforces it as `unless principal in [...]`)
     return (p["workspaceId"] == agent["workspaceId"]
             and (not sc["agent_ids"] or agent["id"] in sc["agent_ids"])
             and (not sc["identifiers"] or agent["identifier"] in sc["identifiers"])

@@ -244,6 +244,54 @@ def _resource_block(item: dict) -> list[str]:
     return out
 
 
+ROUTES_SHOWN = 3
+CEDAR_TAG = re.compile(r"\s*\[cedar: [^\]]*\]")
+
+
+def _routes(item: dict) -> list[str]:
+    """How the instance is reached, one line per route: a host row's tool or host step
+    (with what invokes it), or a downstream path from the agent's tool through each reaction."""
+    routes: list[str] = []
+    for rid in item["rows"]:
+        row = ROWS[rid]
+        if "via" in row:  # host row: "Step:" then "← invoker" / "→ next" lines
+            lines = [ln.strip() for ln in str(row["via"]).splitlines() if ln.strip()]
+            if not lines:
+                continue
+            head = lines[0].rstrip(":")
+            invoker = next((ln[1:].strip() for ln in lines[1:] if ln.startswith("←")), None)
+            routes.append(f"{invoker} → {head}" if invoker else head)
+        else:  # downstream row: one path per unindented line, reactions indented under it
+            path: list[str] = []
+            for raw in str(row.get("paths", "")).splitlines():
+                line = CEDAR_TAG.sub("", raw).strip()
+                if not line:
+                    continue
+                if raw.startswith(" ") and line.startswith("→"):
+                    step = line[1:].strip()
+                    how, _, what = step.partition(": ")
+                    path.append(f"{how.split(' (')[0]}: {what}" if what else step)
+                else:
+                    if path:
+                        routes.append(" → ".join(path))
+                    path = [line]
+            if path:
+                routes.append(" → ".join(path))
+    seen: list[str] = []
+    for r in routes:
+        if r not in seen:
+            seen.append(r)
+    return seen
+
+
+def influence_summary(item: dict) -> str:
+    """'Effects [status] via route; route' for the overview table (markdown-safe)."""
+    routes = _routes(item)
+    shown = "; ".join(routes[:ROUTES_SHOWN]) + (f"; +{len(routes) - ROUTES_SHOWN} more" if len(routes) > ROUTES_SHOWN else "")
+    text = f"{', '.join(item['effects']) or '-'} [{', '.join(item['status'])}]" + (f" via {shown}" if shown else "")
+    return text.replace("|", "/")
+
+
 def write_markdown(path: Path, title: str, model: str, total: int, selected: int, results: list[tuple]) -> None:
     """Rewrite joint-risks.md from the assessments so far: summary, the pairs with
     risks (most risks first, host–remote pairs before the others), then the rest."""
@@ -263,10 +311,11 @@ def write_markdown(path: Path, title: str, model: str, total: int, selected: int
            "Effects are may-effects from the ontology and this session's observations; the risks are an LLM's "
            "brainstorm over them, not evidence that anything happened or is exploitable.", ""]
     if flagged:
-        out += ["## Overview", "", "| # | Pair | Sides | Risks | First risk |", "|---|---|---|---|---|"]
+        out += ["## Overview", "", "| # | Pair | Sides | How each is influenced | Risks | First risk |", "|---|---|---|---|---|---|"]
         for i, (first, second, a) in enumerate(flagged, 1):
+            how = "<br>".join(f"**{it['kind']}**: {influence_summary(it)}" for it in (first, second))
             out.append(f"| [{i}](#pair-{i}) | {first['label']} + {second['label']} | {first['side']}–{second['side']} | "
-                       f"{len(a['risks'])} | {a['risks'][0]['consequence'].replace('|', '/')} |")
+                       f"{how} | {len(a['risks'])} | {a['risks'][0]['consequence'].replace('|', '/')} |")
         out += ["", "## Instances most often involved", "", "| Instance | Kind | Side | Risky pairs |", "|---|---|---|---|"]
         for rid, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
             it = by_id[rid]

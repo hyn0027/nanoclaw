@@ -10,6 +10,7 @@ import { getUndeliveredMessages, writeMessageOut } from './db/messages-out.js';
 import { clearStaleProcessingAcks } from './db/container-state.js';
 import { resolveDestinationThread } from './db/session-routing.js';
 import { touchHeartbeat } from './heartbeat.js';
+import { syncBeforeTurn } from './ontology-gate.js';
 import { getAgentMailbox } from './mailbox/index.js';
 import {
   clearContinuation,
@@ -228,6 +229,20 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
 
     if (keep.length === 0) {
       log(`All ${normalMessages.length} non-command message(s) gated by script, skipping query`);
+      continue;
+    }
+
+    // The host's runtime ontology must cover the agent's current setup (skills,
+    // MCP servers, packages, credentials) before the turn runs; it may be waiting
+    // for the operator. A failed sync refuses the turn (fail closed).
+    const gate = await syncBeforeTurn();
+    if (!gate.ok) {
+      log(`Turn refused: ontology sync failed: ${gate.error}`);
+      await deliverErrorResult(
+        routing,
+        `I can't act on this yet: updating my environment's policies failed (${gate.error ?? 'unknown error'}). It will be retried with your next message.`,
+      );
+      markCompleted(keep.map((m) => m.id));
       continue;
     }
 
@@ -520,6 +535,18 @@ export async function processQuery(
         // MODULE-HOOK:scheduling-pre-task-followup:end
 
         if (keep.length === 0) return;
+        // Same gate as a new batch: the open query must not take a new turn
+        // before the host's ontology covers the agent's current setup.
+        const gate = await syncBeforeTurn();
+        if (!gate.ok) {
+          log(`Follow-up turn refused: ontology sync failed: ${gate.error}`);
+          await deliverErrorResult(
+            extractRouting(keep),
+            `I can't act on this yet: updating my environment's policies failed (${gate.error ?? 'unknown error'}). It will be retried with your next message.`,
+          );
+          markCompleted(keep.map((m) => m.id));
+          return;
+        }
         // Re-check done — the outer query may have finished while the script
         // was awaited. Pushing into a closed stream is wasted work; the
         // claimed messages get released by the host's processing-claim sweep.
