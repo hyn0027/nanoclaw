@@ -89,7 +89,7 @@ ar:OntologyModuleShape a sh:NodeShape ;
   sh:property [ sh:path ar:requiresOntologyModule ; sh:datatype xsd:string ] ;
   sh:property [ sh:path ar:resourcesOnly ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
   sh:property [ sh:path ar:sourceRepositoryPath ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
-  sh:property [ sh:path ar:sourceRevision ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+  sh:property [ sh:path ar:sourceContentHash ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 
 ar:AdaptationMappingShape a sh:NodeShape ;
   sh:targetClass ar:AdaptationMapping ;

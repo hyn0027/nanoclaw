@@ -107,10 +107,10 @@ def add_mcp_graphs(model: Graph, mcp_servers: dict) -> dict[str, str]:
 
 
 def pinned_source(model: Graph) -> tuple[Path | None, str]:
-    """NanoClaw checkout and revision the model is pinned to (nanoclaw-core)."""
+    """NanoClaw checkout and source content hash the model is pinned to (nanoclaw-core)."""
     repo = next(model.objects(AR.NanoClawCoreModule, AR.sourceRepositoryPath), None)
-    revision = str(next(model.objects(AR.NanoClawCoreModule, AR.sourceRevision), ""))
-    return (Path(str(repo)) if repo is not None else None), revision
+    content = str(next(model.objects(AR.NanoClawCoreModule, AR.sourceContentHash), ""))
+    return (Path(str(repo)) if repo is not None else None), content
 
 
 def side_of(model: Graph, kind: URIRef) -> URIRef | None:

@@ -203,7 +203,7 @@ def github(ctx: Context) -> None:
 
     if scope is None:
         ctx.note(["GitHubRepository"], f"no declared scope for the credential at {host}: every repository the token sees counts as writable "
-                                       "(declare one with credential_scope.py set)")
+                                       "(declare one with: ontology_runtime.py ask-scope <credential>)")
         return
     ctx.restrict(f"outside the GitHub token scope {declaration.describe()}", access_check(ctx, scope))
     for repo in ctx.instances.by_kind.get("GitHubRepository", []):

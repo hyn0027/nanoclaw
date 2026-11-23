@@ -1,7 +1,6 @@
 """Assemble selected graphs with provenance and shared-graph checks."""
 
 import hashlib
-import subprocess
 from pathlib import Path
 
 from rdflib import Graph, Literal
@@ -10,6 +9,7 @@ from rdflib.namespace import RDF
 from ..common.namespaces import AR
 from ..common.paths import ROOT, VOCABULARY
 from ..common.rdf import required_literal
+from ..common.source import source_hash
 from .catalog import Catalog, CatalogEntry
 
 
@@ -38,13 +38,14 @@ def check_module(ontology_id: str, entry: CatalogEntry) -> None:
     """Module source pins and the restrictions on always-loaded graphs."""
     graph, node = entry["graph"], entry["node"]
     repos = list(graph.objects(node, AR.sourceRepositoryPath))
-    revisions = list(graph.objects(node, AR.sourceRevision))
-    if len(repos) != len(revisions) or len(repos) > 1:
+    hashes = list(graph.objects(node, AR.sourceContentHash))
+    if len(repos) != len(hashes) or len(repos) > 1:
         raise SystemExit(f"Invalid source pin for {ontology_id}")
     if repos:
-        actual = subprocess.check_output(["git", "-C", str(repos[0]), "rev-parse", "HEAD"], text=True).strip()
-        if actual != str(revisions[0]):
-            raise SystemExit(f"{ontology_id} is stale: source checkout changed")
+        actual = source_hash(Path(str(repos[0])))
+        if actual != str(hashes[0]):
+            raise SystemExit(f"{ontology_id} is stale: {repos[0]} changed outside ontology/ since the model was reviewed. "
+                             f"Review the model against the change, then set ar:sourceContentHash \"{actual}\".")
 
     if (
         any(graph.subjects(RDF.type, AR.Operation))

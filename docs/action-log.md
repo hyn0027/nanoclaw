@@ -58,14 +58,6 @@ Subagent actions carry `agentId`; the timeline labels them `[sub1]`, `[sub2]`, â
 
 Disable the export with `NANOCLAW_ACTION_LOG=false` in `.env` (restart the service).
 
-Sessions that predate the action log can import their earlier history from the Claude transcript once:
-
-```bash
-pnpm exec tsx scripts/action-log-backfill.ts <session-id>
-```
-
-Backfilled entries carry `backfill: true`; the script refuses to run twice and never overlaps native rows.
-
 ## Limitations
 
 - **No network payloads.** Internet requests show method, URL, status and whether a credential was injected â€” never headers or bodies. The gateway decrypts all traffic but only logs a summary line. A request body is visible only when it appears in a tool call (e.g. inline in a `curl` command) and a response only when the tool printed it. `WebFetch` output is the model's summary of the page, not the raw page.

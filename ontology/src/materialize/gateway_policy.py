@@ -60,8 +60,7 @@ select json_build_object(
       and r.generation = (select max(generation) from policy_rules_v2 g
                           where g.status = 'published' and g.scope = r.scope
                             and g.workspace_id is not distinct from r.workspace_id
-                            and g.organization_id is not distinct from r.organization_id)), '[]'::json),
-  'groupsTable', to_regclass('public.cedar_policy_groups') is not null);
+                            and g.organization_id is not distinct from r.organization_id)), '[]'::json));
 """
 
 
@@ -103,7 +102,7 @@ def read_gateway_policy() -> dict | None:
     try:
         out = subprocess.run(argv, input=POLICY_QUERY, check=True, capture_output=True, text=True, timeout=30).stdout
         policy = json.loads(out.strip())
-        policy["policies"] = read_policies(argv, policy["groupsTable"]) if policy["cedarTable"] else []
+        policy["policies"] = read_policies(argv) if policy["cedarTable"] else []
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
         return None
     policy["strict"] = read_strict_deny()
@@ -119,25 +118,14 @@ GROUPED_POLICIES = """
 select coalesce(json_agg(json_build_object(
     'name', g.name || '/' || c.name, 'group', g.name, 'groupSource', g.source, 'description', c.description,
     'text', c.policy_text, 'enabled', c.enabled and g.enabled, 'workspaceId', c.workspace_id,
-    -- Two-layer policies (OneCLI local migration 20261113000000): agents that do not use
-    -- this workspace-wide group. Read via to_jsonb so older databases without the column work.
-    'excludedAgentIds', coalesce(to_jsonb(g) -> 'excluded_agent_ids', '[]'::jsonb))
+    -- agents that do not use this workspace-wide group (two-layer policies)
+    'excludedAgentIds', g.excluded_agent_ids)
   order by g.position, g.created_at, c.position, c.created_at), '[]'::json)
 from cedar_policy_rules c join cedar_policy_groups g on g.id = c.group_id;
 """
 
-# Before policy groups (migration 20261017000000_cedar_policy_groups).
-UNGROUPED_POLICIES = """
-select coalesce(json_agg(json_build_object(
-    'name', c.name, 'group', null, 'groupSource', null, 'description', c.description,
-    'text', c.policy_text, 'enabled', c.enabled, 'workspaceId', c.workspace_id)
-  order by c.position, c.created_at), '[]'::json)
-from cedar_policy_rules c;
-"""
-
-
-def read_policies(argv: list[str], grouped: bool) -> list[dict]:
-    out = subprocess.run(argv, input=GROUPED_POLICIES if grouped else UNGROUPED_POLICIES, check=True, capture_output=True, text=True, timeout=30).stdout
+def read_policies(argv: list[str]) -> list[dict]:
+    out = subprocess.run(argv, input=GROUPED_POLICIES, check=True, capture_output=True, text=True, timeout=30).stdout
     return json.loads(out.strip())
 
 

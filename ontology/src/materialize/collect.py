@@ -6,6 +6,7 @@ never read.
 
 from pathlib import Path
 
+from ..common.source import source_hash
 from .gateway_policy import granted_secrets, read_gateway_policy
 from .provider_tools import read_tool_lists
 from .runtime import container_command, docker_json, ncl, run, sqlite_rows, tool
@@ -90,6 +91,7 @@ def collect_checkout(nanoclaw: Path) -> dict:
         "a2a_installed": (nanoclaw / "src" / "modules" / "agent-to-agent").is_dir(),
         "claude_tools": read_tool_lists(nanoclaw),
         "nanoclaw_head": run([tool("git"), "-C", str(nanoclaw), "rev-parse", "HEAD"]).strip(),
+        "nanoclaw_source_hash": source_hash(nanoclaw),
         "nanoclaw_root": nanoclaw.resolve(),
     }
 

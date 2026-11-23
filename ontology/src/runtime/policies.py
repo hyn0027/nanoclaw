@@ -180,13 +180,16 @@ def desired() -> dict[str, dict]:
     def need(source: str, item: dict, agent: str, why: str) -> None:
         want.setdefault(source, {**item, "agents": {}})["agents"].setdefault(agent, []).append(why)
 
+    servers: dict[str, tuple[dict, dict]] = {}  # per agent group: (servers, modeled ids), read once
     for s in base.active_sessions():
         ag = s["agent_group_id"]
         for name in skill_loads(ag, s["id"]):
             need(f"skill:{name}", {"kind": "skill", "name": name}, ag, f"{s['id']} loaded it")
-        servers = base.fingerprint(ag)["mcp_servers"]
-        modeled = base.modeled_mcp(servers)
-        for name, endpoint in servers.items():
+        if ag not in servers:
+            mine = base.mcp_servers(ag)
+            servers[ag] = (mine, base.modeled_mcp(mine))
+        mine, modeled = servers[ag]
+        for name, endpoint in mine.items():
             sid = modeled.get(name, f"mcp-{name}").removeprefix("mcp-")
             need(f"mcp:{sid}", {"kind": "mcp", "name": sid, "server": name, "endpoint": endpoint}, ag,
                  f"has MCP server {name} ({s['id']} active)")

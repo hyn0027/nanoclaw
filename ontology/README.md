@@ -585,7 +585,7 @@ Important conservative choices include:
 3. Declare exactly one `ar:OntologyModule` resource with a unique string ID.
 4. Declare every module dependency with `ar:requiresOntologyModule`.
 5. If the graph must contain resources only, set `ar:resourcesOnly true`.
-6. If it models a particular source checkout, add both `ar:sourceRepositoryPath` and `ar:sourceRevision`.
+6. If it models a particular source checkout, add both `ar:sourceRepositoryPath` and `ar:sourceContentHash` (the hash of the checkout's files outside `ontology/` when you reviewed it; `src/common/source.py`, and the loader prints the current value when it is stale).
 7. Add the ontology ID to `manifest.json` only when it should be selected explicitly.
 8. Run the validation commands below.
 
@@ -804,7 +804,7 @@ It needs a running NanoClaw service, Docker, and the local Cedar build of OneCLI
 
 ### How it works
 
-1. **Load the model.** `vocabulary.ttl` plus every `ontology/universal/`, `ontology/nanoclaw/`, and `ontology/claude/` graph. If the checkout's `HEAD` differs from `nanoclaw-core`'s pinned `sourceRevision`, it warns that the results may be stale. Skill graphs are only consulted to match installed skills by `skillDirectory`. Each skill in `container/skills/` without a graph prints `warning: skill <name> has no ontology` (its operations are then missing from every table), a matched graph whose `sourceSha256` no longer matches the `SKILL.md` prints `warning: skill <name> ontology is stale`, and each configured MCP server no `ar:mcpEndpointPattern` matches prints `warning: MCP server <name> has no ontology`. The session table repeats the unmodeled ones.
+1. **Load the model.** `vocabulary.ttl` plus every `ontology/universal/`, `ontology/nanoclaw/`, and `ontology/claude/` graph. If the checkout's source (every file outside `ontology/`) differs from what `nanoclaw-core` pins (`sourceContentHash`), it warns that the results may be stale. Skill graphs are only consulted to match installed skills by `skillDirectory`. Each skill in `container/skills/` without a graph prints `warning: skill <name> has no ontology` (its operations are then missing from every table), a matched graph whose `sourceSha256` no longer matches the `SKILL.md` prints `warning: skill <name> ontology is stale`, and each configured MCP server no `ar:mcpEndpointPattern` matches prints `warning: MCP server <name> has no ontology`. The session table repeats the unmodeled ones.
 2. **Collect facts** (`collect.py`, through the read-only wrappers in `runtime.py`), names and settings only, never secret values, tokens, or environment values:
 
    | Source | Facts |
@@ -854,18 +854,13 @@ Every effect ends at instances, not kinds (`src/materialize/instances/`: `model.
 
 #### Declared credential scopes
 
-Some limits of a token cannot be observed. Reads overstate it (any token reads public repositories), GitHub has no API that lists a fine-grained token's selected repositories or permissions, and probing with writes is not acceptable. The owner declares them instead, once, in `local/credential-scopes.json` (git-ignored; it names private resources), and materialize trusts the declaration:
+Some limits of a token cannot be observed. Reads overstate it (any token reads public repositories), GitHub has no API that lists a fine-grained token's selected repositories or permissions, and probing with writes is not acceptable. The owner declares them instead, in `local/credential-scopes.json` (git-ignored; it names private resources), and materialize trusts the declaration. The runtime asks for it (a DM card or the terminal, with choices or a plain-language description; see `docs/ontology-runtime.md` in NanoClaw) when the credential is first connected; to change it, e.g. after changing the token's permissions:
 
 ```bash
-python3 credential_scope.py suggest GitHub     # from the latest run: the private repositories the token can see
-python3 credential_scope.py set GitHub --repos hyn0027/agent-playground \
-    --permission contents=read --permission issues=read --permission metadata=read --permission pull_requests=read \
-    --no-user-permissions --expires 2027-01-14 --note "fine-grained PAT 'nanoclaw'"
-python3 credential_scope.py show
-python3 credential_scope.py rm GitHub
+python3 ontology_runtime.py ask-scope GitHub     # asks again; answer in the DM, or: ontology_runtime.py answer <id>
 ```
 
-A declaration is keyed by the OneCLI credential name and records the secret's id and `updated_at` (never its value); when the secret is later replaced or updated, materialize warns that the declaration may be stale. An optional `expiresAt` makes the declaration stale after that date. For GitHub, `repositories` are `owner/name` patterns, `user_permissions` the account-level ones (`"*"` by default, `{}` with `--no-user-permissions`; e.g. `gists`, `starring`, `profile`, `administration` to create repositories; map `USER_PERMISSION` in `envs/github.py`), and `permissions` is `"*"` (anything the token's tools can do there) or fine-grained permission levels (`issues`, `contents`, `pull_requests`, `actions`, `workflows`, `checks`, `discussions`, `administration`, ...; the kind → permission map is `PERMISSION` in `envs/github.py`).
+A declaration is keyed by the OneCLI credential name and records the secret's id and `updated_at` (never its value); when the secret is later replaced or updated, materialize warns that the declaration may be stale. An optional `expiresAt` makes the declaration stale after that date. For GitHub, `repositories` are `owner/name` patterns, `user_permissions` the account-level ones (`"*"` by default, `{}` for none; e.g. `gists`, `starring`, `profile`, `administration` to create repositories; map `USER_PERMISSION` in `envs/github.py`), and `permissions` is `"*"` (anything the token's tools can do there) or fine-grained permission levels (`issues`, `contents`, `pull_requests`, `actions`, `workflows`, `checks`, `discussions`, `administration`, ...; the kind → permission map is `PERMISSION` in `envs/github.py`).
 
 How it is used: the GitHub source registers an access check (`ctx.restrict`). The agent's own effects (the remote table, and the first step of each downstream path) reach only instances the check allows: changes need the repository in the declaration with write on the kind's permission; reads need the repository public or declared readable. The rest are not shown: an effect whose every target is excluded disappears from the remote table, starts no downstream chain, and makes no joint-risk item. The reasons are kept in the run's `ruled-out.jsonl` (e.g. "Create GitHubIssue (the agent's own effect)": outside the declared token scope). Reactions the environment carries out itself (a workflow run acts with its own token) are not checked against the declaration; they inherit the narrowed scope of the path. With a declaration, public repositories outside it are only readable, like every public repository on GitHub, so they are not listed one by one: they become a single instance, "any public repository on GitHub (readable by any token; not writable under the declared scope)", and workflow discovery runs only in the listed repositories (where the token's effects can start). Undeclared private repositories the token sees stay listed, with a warning. Reading a repository needs `metadata` (map `READ_PERMISSION`), changing its settings `administration`. Repositories get a `declared_access` attribute, and the Discovered instances table shows the declaration. Mismatches with what discovery observes are warnings: a declared repository the token cannot see, or a private repository the token sees but the declaration leaves out (a fine-grained token sees exactly the private repositories it was granted). With no declaration, every repository the token sees counts as writable, and the table says so.
 
@@ -1054,8 +1049,8 @@ The default list is `DEFAULT_IGNORED_GROUPS` in `src/materialize/gateway_policy.
 
 `materialize.py` instantiates a skill only if the agent has loaded it: a `Skill` tool call, or a
 tool reading its `SKILL.md`, in the action logs (`logs/sessions/<group>/*/actions.jsonl`) of any
-session of the agent group, closed sessions included. `--skills-loaded-in session` limits that
-to the session being materialized; `--all-skills` instantiates every installed skill. The session
+session of the agent group, closed sessions included (`--skills group`, the default). `--skills session`
+limits that to the session being materialized; `--skills all` instantiates every installed skill. The session
 table lists each materialized skill with when and in which session it was first loaded.
 
 This is per agent: an agent is the agent group, so only its own sessions count, and one agent's

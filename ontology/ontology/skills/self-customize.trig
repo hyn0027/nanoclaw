@@ -5,7 +5,7 @@ ar:g_self_customize {
   ar:skill_self_customize a ar:Skill ;
     ar:skillDirectory "self-customize" ;
     ar:sourcePath "/Users/yhong3/Documents/Research/nanoclaw/container/skills/self-customize/SKILL.md" ;
-    ar:sourceSha256 "6188eb5e338ca081480609929e87c8b6c01451963caf2b915ef704ba719d89ef" ;
+    ar:sourceSha256 "877ad1288b9873dddc1a11de6fbc41e3625ea6b38c2b58f011811124a754724b" ;
     ar:requiresOntologyModule "container-tooling", "nanoclaw-core", "nanoclaw-runtime",
       "nanoclaw-control", "nanoclaw-messaging", "nanoclaw-network", "local-filesystem" ;
     ar:subjectToControlKind ar:NanoClawHumanApprovalControl, ar:NanoClawHostActionGuard,
@@ -18,7 +18,7 @@ ar:g_self_customize {
     ar:sourceNote "NanoClaw container skill (container/skills/self-customize). Decision tree for changing the agent itself: memory and standing instructions (no approval), install_packages and add_mcp_server (admin approval), and source changes delegated to a builder agent made with create_agent." ;
     ar:declaresOperation ar:op_selfcust_edit_instructions, ar:op_selfcust_install_packages,
       ar:op_selfcust_add_mcp_server, ar:op_selfcust_create_builder, ar:op_selfcust_delegate,
-      ar:op_selfcust_prototype_install, ar:op_selfcust_builder_edit_source .
+      ar:op_selfcust_builder_edit_source .
 
   ar:cond_selfmod_admin_approved a ar:Requirement ;
     rdfs:comment "An admin (scoped, global, or owner) approves the held self-modification request." .
@@ -63,29 +63,12 @@ ar:g_self_customize {
     ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Delegate ; ar:affectsKind ar:NanoClawAgentGroup ],
       [ a ar:PotentialEffect ; ar:effectType ar:Create ; ar:affectsKind ar:NanoClawInboundMessage ] .
 
-  ar:op_selfcust_prototype_install a ar:Operation ; ar:invokedThroughKind ar:PackageManagerCLI ;
-    ar:targetsKind ar:InstalledPackageTree ;
-    ar:requires ar:cond_container_shell_available, ar:cond_container_file_writable, ar:cond_package_registry_reachable ;
-    ar:mayInitiateInternetCall ar:call_selfcust_registry ;
-    ar:sourceStatus ar:SkillText ;
-    ar:sourceNote "Prototype first with pnpm install in /workspace/agent/ — no approval, and the packages persist in the group workspace on the host." ;
-    ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Install ; ar:affectsKind ar:InstalledPackageTree ],
-      [ a ar:PotentialEffect ; ar:effectType ar:Execute ; ar:affectsKind ar:NanoClawContainerProcess ] .
-
   ar:op_selfcust_builder_edit_source a ar:Operation ; ar:invokedThroughKind ar:NanoClawProviderFileTool ;
     ar:targetsKind ar:NanoClawSharedRunnerSource ;
     ar:requires ar:cond_provider_file_tool_available, ar:cond_container_file_writable ;
     ar:sourceStatus ar:SkillText ; ar:adaptationStatus ar:InferredForNanoClaw ;
     ar:sourceNote "The builder is told to edit container/agent-runner/src and the Dockerfile. In NanoClaw /app/src is a read-only mount and the project root is not mounted, so the edit fails unless an operator adds a writable mount of the source." ;
     ar:hasPotentialEffect [ a ar:PotentialEffect ; ar:effectType ar:Update ; ar:affectsKind ar:NanoClawSharedRunnerSource ] .
-
-  ar:call_selfcust_registry a ar:PotentialInternetCall ;
-    ar:callInitiatorKind ar:NanoClawAgentContainer ;
-    ar:callViaKind ar:PackageManagerCLI, ar:NanoClawProxyAwareHTTPRequest ;
-    ar:callEndpointKind ar:PackageRegistryEndpoint ; ar:callStage ar:ContainerEgress ;
-    ar:callEndpointPattern "https://registry.npmjs.org/{package}" ;
-    ar:sourceStatus ar:InferredForNanoClaw ;
-    ar:sourceNote "Workspace-local installs fetch packages from the registry and run their install scripts in the container." .
 
   ar:adapt_selfcust_instructions a ar:AdaptationMapping ;
     ar:sourceAssumption "Memory and standing instructions are edited directly, without approval." ;

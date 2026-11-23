@@ -64,10 +64,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ignore-policy-group", action="append", metavar="GROUP",
                         help="treat this OneCLI Cedar policy group as nonexistent (repeatable; default: "
                              + ", ".join(DEFAULT_IGNORED_GROUPS) + ")")
-    parser.add_argument("--skills-loaded-in", choices=("group", "session"), default="group",
-                        help="materialize only skills the agent has loaded (invoked, or read its SKILL.md): in any session of its "
-                             "agent group, closed ones included (group, default), or in this session only (session)")
-    parser.add_argument("--all-skills", action="store_true", help="materialize every installed skill, loaded or not")
+    parser.add_argument("--skills", choices=("group", "session", "all"), default="group",
+                        help="which skills to materialize: those the agent has loaded (invoked, or read its SKILL.md) in any "
+                             "session of its agent group, closed ones included (group, default), or in this session only "
+                             "(session); or every installed skill (all)")
     parser.add_argument("--include-default-policy", action="store_true",
                         help="consider every policy group, including the default ones listed above")
     args = parser.parse_args()
@@ -81,15 +81,15 @@ def main() -> None:
     set_table_width(args.width)
     set_ignored_groups(set(args.ignore_policy_group or ()) | (set() if args.include_default_policy else set(DEFAULT_IGNORED_GROUPS)))
     model = load_model()
-    pinned_repo, pinned_rev = pinned_source(model)
+    pinned_repo, pinned_hash = pinned_source(model)
     facts = collect(args.nanoclaw or pinned_repo, args.session)
-    # Only skills the agent has loaded (per its action logs) are materialized, unless --all-skills.
+    # Only skills the agent has loaded (per its action logs) are materialized, unless --skills all.
     from ..runtime.policies import skills_ever_loaded
     session = facts["session"]
-    facts["loaded_skills"] = skills_ever_loaded(session["agent_group_id"], session["id"] if args.skills_loaded_in == "session" else None)
-    facts["loaded_skills_scope"] = "all installed (--all-skills)" if args.all_skills else (
-        "this session" if args.skills_loaded_in == "session" else "any session of the agent group")
-    materialized = facts["container_skills"] if args.all_skills else [n for n in facts["container_skills"] if n in facts["loaded_skills"]]
+    facts["loaded_skills"] = skills_ever_loaded(session["agent_group_id"], session["id"] if args.skills == "session" else None)
+    facts["loaded_skills_scope"] = {"all": "all installed (--skills all)", "session": "this session",
+                                    "group": "any session of the agent group"}[args.skills]
+    materialized = facts["container_skills"] if args.skills == "all" else [n for n in facts["container_skills"] if n in facts["loaded_skills"]]
     facts["materialized_skills"] = materialized
     facts["skills_with_ontology"] = sorted(skill_directories())
     facts["modeled_skills"] = add_skill_graphs(model, materialized)
@@ -98,7 +98,7 @@ def main() -> None:
     taken_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     log = RunLog(args.out, session["id"], taken_at)
     try:
-        run(args, facts, model, pinned_rev, taken_at, log)
+        run(args, facts, model, pinned_hash, taken_at, log)
     finally:
         log.close()
     print(f"\nRun log: {log.dir}")
@@ -111,7 +111,7 @@ def load_runtime(facts: dict, model, expand: bool) -> dict | None:
     from ..runtime.store import SessionOntology
     session = facts["session"]
     if expand:
-        runtime_cli.cmd_tick(argparse.Namespace(session=session["id"], no_llm=False, dry_run=False, keep_calls=False, model=None))
+        runtime_cli.tick(session["id"])
     ont = SessionOntology(session["agent_group_id"], session["id"])
     if not ont.state["expansions"]:
         return {"id": ont.ontology_id, "head": None, "expansions": 0} if ont.exists else None
@@ -119,7 +119,7 @@ def load_runtime(facts: dict, model, expand: bool) -> dict | None:
     return {"id": ont.ontology_id, "head": ont.state["head"], "expansions": len(ont.state["expansions"]), "dir": str(ont.dir)}
 
 
-def run(args: argparse.Namespace, facts: dict, model, pinned_rev: str, taken_at: str, log: RunLog) -> None:
+def run(args: argparse.Namespace, facts: dict, model, pinned_hash: str, taken_at: str, log: RunLog) -> None:
     for name in facts["container_skills"]:
         if name not in facts["skills_with_ontology"]:
             log.warn(f"skill {name} has no ontology (ontology/skills/*.trig with ar:skillDirectory \"{name}\"); its operations are not in the tables")
@@ -131,8 +131,9 @@ def run(args: argparse.Namespace, facts: dict, model, pinned_rev: str, taken_at:
     rt = facts.get("runtime_ontology")
     if rt:
         print(f"Runtime ontology {rt['id']}: head {rt['head'] or '(base only)'}, {rt['expansions']} expansion(s) merged")
-    if facts["nanoclaw_head"] != pinned_rev:
-        log.warn(f"nanoclaw_head={facts['nanoclaw_head'][:12]}; modeled_revision={pinned_rev[:12]}")
+    if facts["nanoclaw_source_hash"] != pinned_hash:
+        log.warn(f"NanoClaw source changed since the model was reviewed (source hash {facts['nanoclaw_source_hash'][:12]}, "
+                 f"modeled {pinned_hash[:12]}): results may be stale")
 
     snap = Snapshot(facts, model, taken_at)
     problem = deny_by_default_problem(facts["gateway_policy"], snap.lockdown_on)

@@ -6,7 +6,7 @@ ar:g_nanoclaw_core {
     ar:ontologyModuleId "nanoclaw-core" ;
     ar:requiresOntologyModule "local-filesystem" ;
     ar:sourceRepositoryPath "/Users/yhong3/Documents/Research/nanoclaw" ;
-    ar:sourceRevision "619dea195c10bf60c4e9e30577ff00a91e83746c" .
+    ar:sourceContentHash "2e36b3bdc62ee72d7f4a01862d747aa1f75b45405d8f8ae07f50a88ca9c987cf" .
 
   ar:NanoClawRuntime a ar:WorldSurfaceKind, ar:SystemComponentKind ;
     rdfs:comment "The NanoClaw installation described by checkout 08ceb915e23fff1ec22a322cd44bb82294d9907b (branch customized: upstream 7902716b plus local commits). Types in this graph are architectural possibilities, not observations about a running instance or its configuration." ;

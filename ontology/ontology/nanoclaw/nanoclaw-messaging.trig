@@ -23,7 +23,7 @@ ar:g_nanoclaw_messaging {
   ar:NanoClawOutboundMailbox a ar:WorldSurfaceKind, ar:SystemComponentKind ;
     ar:specializesKind ar:NanoClawSessionMailbox ;
     ar:mayBeStoredAsKind ar:LocalFile ;
-    rdfs:comment "Container-written, host-read side of a session mailbox (SQLite: outbound.db): outbound messages and system actions, processing acknowledgements, session and container state. Not strictly single-writer: the host also writes a direct reply here when the command gate denies a command, and deletes orphaned processing claims when resetting a stuck container. Any container process, not only the built-in MCP tools, can write rows; host guards still apply to the actions they request." .
+    rdfs:comment "Container-written, host-read side of a session mailbox (SQLite: outbound.db): outbound messages and system actions, processing acknowledgements, session and container state, and the action log (every tool call with its input and output, and the assistant's text), which the host copies to logs/sessions/ outside every container. Not strictly single-writer: the host also writes a direct reply here when the command gate denies a command, and deletes orphaned processing claims when resetting a stuck container. Any container process, not only the built-in MCP tools, can write rows; host guards still apply to the actions they request." .
   ar:NanoClawInboundMessage a ar:WorldSurfaceKind .
   ar:NanoClawOutboundMessage a ar:WorldSurfaceKind .
   ar:NanoClawProcessingAck a ar:WorldSurfaceKind .

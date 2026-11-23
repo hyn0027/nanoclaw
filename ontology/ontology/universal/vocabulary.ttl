@@ -67,7 +67,8 @@ ar:requiresOntologyModule a rdf:Property ; rdfs:range xsd:string ;
   rdfs:comment "Static identifier of an ontology module required by a skill or another module. The loader validates this metadata against load-config.json but never loads it dynamically." .
 ar:resourcesOnly a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:boolean .
 ar:sourceRepositoryPath a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string .
-ar:sourceRevision a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string .
+ar:sourceContentHash a rdf:Property ; rdfs:domain ar:OntologyModule ; rdfs:range xsd:string ;
+  rdfs:comment "sha256 of the modeled checkout's files outside ontology/ (src/common/source.py) when the module was last reviewed against it." .
 ar:skillDirectory a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range xsd:string .
 ar:sourceSha256 a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range xsd:string .
 ar:hasAdaptationMapping a rdf:Property ; rdfs:domain ar:Skill ; rdfs:range ar:AdaptationMapping .

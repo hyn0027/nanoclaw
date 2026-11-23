@@ -71,7 +71,7 @@ class Context:
         from .declarations import for_host
         d = for_host(self.snap.facts["secrets"], host)
         if d and d.stale:
-            self.warn(f"declared scope of credential '{d.credential}' may be stale: {d.stale}; re-confirm with credential_scope.py set")
+            self.warn(f"declared scope of credential '{d.credential}' may be stale: {d.stale}; re-confirm with: ontology_runtime.py ask-scope {d.credential}")
         return d
 
     def restrict(self, why: str, check) -> None:

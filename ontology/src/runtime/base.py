@@ -73,17 +73,26 @@ def granted_credentials(group_id: str) -> dict | None:
             for s in granted_secrets(policy, agent["id"])}
 
 
-def fingerprint(group_id: str) -> dict:
+def _config(group_id: str) -> dict:
     rows = central("SELECT * FROM container_configs WHERE agent_group_id = ?", group_id)
-    cfg = rows[0] if rows else {}
+    return rows[0] if rows else {}
+
+
+def mcp_servers(group_id: str, cfg: dict | None = None) -> dict[str, str]:
+    """The group's MCP servers: name -> URL, or command line for a stdio server."""
+    mcp = json.loads((cfg if cfg is not None else _config(group_id)).get("mcp_servers") or "{}")
+    return {n: (s.get("url") or " ".join([s.get("command", ""), *s.get("args", [])]).strip()) for n, s in mcp.items()}
+
+
+def fingerprint(group_id: str) -> dict:
+    cfg = _config(group_id)
     selection = json.loads(cfg.get("skills") or '"all"')
     available = sorted(p.name for p in SKILLS_SRC.iterdir() if p.is_dir()) if SKILLS_SRC.is_dir() else []
     names = available if selection == "all" else [s for s in selection if s in available]
-    mcp = json.loads(cfg.get("mcp_servers") or "{}")
     return {
         "skills": {n: sha(SKILLS_SRC / n / "SKILL.md") for n in names},
         "bundled_skills": bundled_skills(group_id),
-        "mcp_servers": {n: (s.get("url") or " ".join([s.get("command", ""), *s.get("args", [])]).strip()) for n, s in mcp.items()},
+        "mcp_servers": mcp_servers(group_id, cfg),
         "packages": {"apt": json.loads(cfg.get("packages_apt") or "[]"), "npm": json.loads(cfg.get("packages_npm") or "[]")},
         "credentials": granted_credentials(group_id),
         "provider": cfg.get("provider") or "claude",

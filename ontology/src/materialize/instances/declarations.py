@@ -26,7 +26,8 @@ resources), keyed by OneCLI credential name:
       }
     }
 
-Edit it with ``python3 credential_scope.py`` (set, show, rm, suggest).
+Written by the runtime's scope questions (src/runtime/scope_questions.py); ask again with
+``python3 ontology_runtime.py ask-scope <credential>``.
 """
 
 import json

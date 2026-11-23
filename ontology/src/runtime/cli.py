@@ -290,24 +290,32 @@ def cmd_sync(args) -> None:
     log(f"{sess['id']}: sync done" + (f" (skill {args.skill})" if args.skill else ""))
 
 
-def cmd_tick(args) -> None:
+def tick(session: str | None = None, *, no_llm: bool = False, dry_run: bool = False, keep_calls: bool = False,
+         model: str | None = None) -> None:
+    """Route new gateway captures and bring the active sessions (or one) up to date. Also what
+    materialize calls before it reads a session's runtime ontology."""
+    opts = argparse.Namespace(no_llm=no_llm, dry_run=dry_run, keep_calls=keep_calls, model=model)
     lock = run_lock(blocking=False)  # kept referenced for the whole tick
     if lock is None:
         log("another run holds the lock; skipping")
         return
     sessions = base.active_sessions()
-    if args.session:
-        sessions = [s for s in sessions if s["id"] == args.session]
+    if session:
+        sessions = [s for s in sessions if s["id"] == session]
         if not sessions:
-            sys.exit(f"no active session {args.session}")
-    route_capture(args.keep_calls)
+            sys.exit(f"no active session {session}")
+    route_capture(keep_calls)
     for s in sessions:
-        tick_session(s, args)
-    if not args.session:
+        tick_session(s, opts)
+    if not session:
         try:
-            policies.reconcile(generate=not args.no_llm and not args.dry_run, log=log)
+            policies.reconcile(generate=not no_llm and not dry_run, log=log)
         except policies.PolicyError as e:
             log(f"policies: {e}")
+
+
+def cmd_tick(args) -> None:
+    tick(args.session, no_llm=args.no_llm, dry_run=args.dry_run, keep_calls=args.keep_calls, model=args.model)
 
 
 def cmd_questions(args) -> None:
@@ -483,9 +491,7 @@ def main() -> None:
     sy.add_argument("--session", required=True)
     sy.add_argument("--skill", help="the agent is loading this skill")
     sy.add_argument("--traffic", action="store_true", help="end of a turn: expand from captured calls (non-blocking use)")
-    sy.add_argument("--keep-calls", action="store_true")
-    sy.add_argument("--model", help="model for claude -p")
-    sy.set_defaults(dry_run=False)
+    sy.set_defaults(dry_run=False, keep_calls=False, model=None)  # model: ONTOLOGY_MODEL or the subscription default
     s = sub.add_parser("status")
     s.add_argument("--session")
     sh = sub.add_parser("show")
