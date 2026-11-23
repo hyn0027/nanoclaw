@@ -42,6 +42,11 @@ function gateOn(): boolean {
   return process.env.NANOCLAW_ONTOLOGY_GATE === '1';
 }
 
+/** The host's notice, as a block put in front of the turn's prompt (empty when none). */
+export function noticeBlock(notice: string | undefined): string {
+  return notice ? `<system_notice from="nanoclaw">\n${notice}\n</system_notice>\n\n` : '';
+}
+
 /** What the user is told when a turn is refused because the sync failed. */
 export function turnRefusal(error: string | undefined): string {
   return `I can't act on this yet: updating my environment's policies failed (${error ?? 'unknown error'}). It will be retried with your next message.`;

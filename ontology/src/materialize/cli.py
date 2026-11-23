@@ -55,9 +55,9 @@ def parse_args() -> argparse.Namespace:
                         help="skip live instance discovery (read-only GitHub/Vercel calls made from the container as the agent); NanoClaw records and credential grants are still used")
     parser.add_argument("--max-pairs", type=int, help="maximum host/downstream resource pairs to annotate with the LLM (default: all; 0: skip)")
     parser.add_argument("--cross-only", action="store_true", help="annotate only host–remote instance pairs")
-    parser.add_argument("--workers", type=int, default=20, help="parallel LLM calls for the pair annotation (default: 20)")
+    parser.add_argument("--workers", type=int, help="parallel Claude calls for the pair annotation (default: llm.toml [tasks.pair_risks_session].workers)")
     parser.add_argument("--seed", type=int, help="random seed for the pair sample (default: a fresh one, printed)")
-    parser.add_argument("--model", default="gpt-6-luna", help="OpenAI model for the pair annotation (default: gpt-6-luna)")
+    parser.add_argument("--model", help="Claude model for the pair annotation (default: llm.toml [tasks.pair_risks_session] / [claude])")
     parser.add_argument("--no-expand", action="store_true",
                         help="do not run a runtime-ontology tick first (route new gateway captures, expand); the session's existing expansions are still loaded")
     parser.add_argument("--base-only", action="store_true", help="ignore the session's runtime expansions: the base model only")

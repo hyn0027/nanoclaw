@@ -146,6 +146,8 @@ async function setupFingerprint(agentGroupId: string): Promise<string> {
   const parts = [
     JSON.stringify((await getContainerConfig(agentGroupId)) ?? null),
     statLine(path.join(DATA_DIR, 'v2-sessions', agentGroupId, '.claude-shared', 'settings.json')),
+    // The operator's declared credential scopes: the agent is told them (topics.credentials_notice).
+    statLine(path.join(ONTOLOGY_DIR, 'local', 'credential-scopes.json')),
     ...skillsListing(),
     await onecliGrants(),
   ];
@@ -154,8 +156,11 @@ async function setupFingerprint(agentGroupId: string): Promise<string> {
 
 // ── running the Python runtime ─────────────────────────────────────────────
 
-/** Run `ontology_runtime.py <args>`; resolves with the failure reason, or null on success. */
-function runRuntime(args: string[]): Promise<string | null> {
+/**
+ * Run `ontology_runtime.py <args>`; resolves with the failure reason, or null on success.
+ * `notices` collects its `SYNC NOTICE:` lines (what the agent should be told).
+ */
+function runRuntime(args: string[], notices?: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     const out = fs.openSync(path.join(LOG_DIR, 'runtime.log'), 'a');
@@ -168,6 +173,7 @@ function runRuntime(args: string[]): Promise<string | null> {
       fs.appendFileSync(path.join(LOG_DIR, 'runtime.log'), text);
       const m = /SYNC FAILED: (.*)/.exec(text);
       if (m) failure = m[1].trim();
+      for (const n of text.matchAll(/SYNC NOTICE: (.*)/g)) notices?.push(n[1].trim());
     });
     child.on('error', (err) => {
       children.delete(child);
@@ -188,7 +194,7 @@ function runRuntime(args: string[]): Promise<string | null> {
   });
 }
 
-async function reply(session: Session, requestId: string, error: string | null): Promise<void> {
+async function reply(session: Session, requestId: string, error: string | null, notices: string[] = []): Promise<void> {
   await writeSessionMessage(session.agent_group_id, session.id, {
     id: `ontology-resp-${requestId}`,
     kind: 'system',
@@ -196,7 +202,7 @@ async function reply(session: Session, requestId: string, error: string | null):
     content: JSON.stringify({
       type: 'ontology_response',
       requestId,
-      frame: error ? { ok: false, error } : { ok: true },
+      frame: error ? { ok: false, error } : { ok: true, ...(notices.length ? { notice: notices.join('\n') } : {}) },
     }),
     trigger: false,
   });
@@ -217,17 +223,20 @@ async function handleSync(session: Session, requestId: string, reason: string, s
     if (retrySources.delete(session.id)) expandInBackground(session);
     return;
   }
+  const notices: string[] = [];
   const error = await enqueue(session.id, async () => {
     if (reason === 'skill' && skill) {
-      return runRuntime(['sync', '--session', session.id, '--skill', skill]);
+      return runRuntime(['sync', '--session', session.id, '--skill', skill], notices);
     }
     const before = await setupFingerprint(session.agent_group_id);
     if (synced.get(session.id) === before) return null;
-    const failed = await runRuntime(['sync', '--session', session.id]);
+    const failed = await runRuntime(['sync', '--session', session.id], notices);
+    // A grant made during the sync (a credential question) changes the fingerprint, so the
+    // next turn syncs again and records it in the session's ontology.
     if (!failed) synced.set(session.id, before);
     return failed;
   });
-  await reply(session, requestId, error);
+  await reply(session, requestId, error, notices);
   if (!error) expandInBackground(session);
   const ms = Date.now() - started;
   if (error)

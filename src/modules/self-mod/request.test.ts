@@ -27,6 +27,7 @@ import { ensureContainerConfig, updateContainerConfigJson } from '../../db/conta
 import { createMessagingGroup } from '../../db/messaging-groups.js';
 import { createSession, getPendingApprovalsByAction } from '../../db/sessions.js';
 import { setDeliveryAdapter, type ChannelDeliveryAdapter } from '../../delivery.js';
+import { HOST_ONLY_NOTE } from '../../host-only.js';
 import { writeSessionMessage } from '../../session-manager.js';
 import { upsertUser } from '../permissions/db/users.js';
 import { upsertUserDm } from '../permissions/db/user-dms.js';
@@ -128,9 +129,12 @@ afterEach(async () => {
 });
 
 /** The `question` text of the most recently delivered approval card. */
+/** The card's question as the module built it: the host-only note (host-only.ts) the
+ *  delivery adapter appends is not part of the card's content or its size cap. */
 function lastQuestion(): string {
   expect(delivered.length).toBeGreaterThan(0);
-  return (JSON.parse(delivered[delivered.length - 1].content) as { question: string }).question;
+  const question = (JSON.parse(delivered[delivered.length - 1].content) as { question: string }).question;
+  return question.endsWith(`\n\n${HOST_ONLY_NOTE}`) ? question.slice(0, -`\n\n${HOST_ONLY_NOTE}`.length) : question;
 }
 
 /** The text of the most recent agent-facing note written via writeSessionMessage. */

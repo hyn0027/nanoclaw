@@ -148,8 +148,10 @@ const preToolUseHook: HookCallback = async (input) => {
   // Loading a skill waits for the host's ontology sync (its OneCLI policy group,
   // and its graph if it has no reviewed one); a failed sync refuses the load.
   const skill = skillOfToolCall(toolName, i.tool_input);
+  let notice: string | undefined;
   if (skill) {
     const gate = await syncBeforeSkill(skill);
+    notice = gate.notice;
     if (!gate.ok) {
       recordAction({
         event: 'tool_blocked',
@@ -171,6 +173,13 @@ const preToolUseHook: HookCallback = async (input) => {
     setContainerToolInFlight(toolName, declaredTimeoutMs);
   } catch (err) {
     log(`PreToolUse: failed to record container_state: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (notice) {
+    // The skill's sync had something to tell the agent (e.g. a credential it lacks).
+    return {
+      continue: true,
+      hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: notice },
+    } as unknown as ReturnType<HookCallback>;
   }
   return { continue: true };
 };

@@ -11,7 +11,7 @@ import { clearStaleProcessingAcks } from './db/container-state.js';
 import { resolveDestinationThread } from './db/session-routing.js';
 import { touchHeartbeat } from './heartbeat.js';
 import { getAgentMailbox } from './mailbox/index.js';
-import { syncBeforeTurn, turnRefusal } from './ontology-gate.js';
+import { noticeBlock, syncBeforeTurn, turnRefusal } from './ontology-gate.js';
 import {
   clearContinuation,
   clearCurrentReplyRoute,
@@ -245,7 +245,8 @@ export async function runPollLoop(config: PollLoopConfig): Promise<void> {
 
     // Format messages: passthrough commands get raw text (only if the
     // provider natively handles slash commands), others get XML.
-    const prompt = formatMessagesWithCommands(keep, nativeSlashCommands, config.providerName);
+    const prompt =
+      noticeBlock(gate.notice) + formatMessagesWithCommands(keep, nativeSlashCommands, config.providerName);
 
     log(`Processing ${keep.length} message(s), kinds: ${[...new Set(keep.map((m) => m.kind))].join(',')}`);
 
@@ -547,7 +548,7 @@ export async function processQuery(
         if (done) return;
 
         const keptIds = keep.map((m) => m.id);
-        const prompt = formatMessages(keep);
+        const prompt = noticeBlock(gate.notice) + formatMessages(keep);
         log(`Pushing ${keep.length} follow-up message(s) into active query`);
         query.push(prompt);
         archivePrompts.push(prompt);

@@ -18,8 +18,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--width", type=int, help="fit printed tables into this many characters (default: the terminal width, or 160 when output is redirected)")
     parser.add_argument("--max-pairs", type=int, help="Maximum pairs to annotate (default: all; 0: skip)")
-    parser.add_argument("--model", default="gpt-6-luna", help="OpenAI model (default: gpt-6-luna)")
-    parser.add_argument("--workers", type=int, default=20, help="parallel LLM calls (default: 20)")
+    parser.add_argument("--model", help="Claude model (default: llm.toml [tasks.pair_risks_kinds] / [claude])")
+    parser.add_argument("--workers", type=int, help="parallel Claude calls (default: llm.toml [tasks.pair_risks_kinds].workers)")
     parser.add_argument("--seed", type=int, help="random seed for the pair sample (default: a fresh one, printed)")
     args = parser.parse_args()
     if args.max_pairs is not None and args.max_pairs < 0:

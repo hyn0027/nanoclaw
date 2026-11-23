@@ -18,6 +18,8 @@ const RESEND_MS = 5 * 60_000;
 export interface HostAnswer {
   ok: boolean;
   error?: string;
+  /** Something the agent should be told (e.g. a credential was granted, or is missing). */
+  notice?: string;
 }
 
 export function newRequestId(prefix: string): string {

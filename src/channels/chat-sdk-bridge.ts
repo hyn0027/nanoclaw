@@ -27,6 +27,7 @@ import { normalizeOptions, type NormalizedOption } from './ask-question.js';
 import type { ChannelAdapter, ChannelDefaults, ChannelSetup, InboundMessage } from './adapter.js';
 import { INSTANCE_KEY_RE } from './channel-registry.js';
 import { resolveQuestionRender } from './question-render-registry.js';
+import { isHostOnlyCard, withHostOnlyNote } from '../host-only.js';
 
 /** Adapter with optional gateway support (e.g., Discord). */
 interface GatewayAdapter extends Adapter {
@@ -720,7 +721,9 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
 
         // Update the card to show the selected answer, who acted, and remove buttons
         const actorName = event.user?.userName || event.user?.fullName || '';
-        const resolution = actorName ? `${selectedLabel} by ${actorName}` : selectedLabel;
+        const answered = actorName ? `${selectedLabel} by ${actorName}` : selectedLabel;
+        // A card the host sent itself keeps saying the agent never saw it (host-only.ts).
+        const resolution = isHostOnlyCard(questionId) ? withHostOnlyNote(answered) : answered;
         try {
           const tid = event.threadId;
           await adapter.editMessage(

@@ -225,3 +225,52 @@ ar:ExternalService a ar:WorldSurfaceKind .
 ar:Credential a ar:WorldSurfaceKind .
 ar:HumanRecipient a ar:WorldSurfaceKind ;
   rdfs:comment "Potential downstream recipient; a send operation does not prove attention or behavior." .
+
+# ── Credential access models ────────────────────────────────────────────────
+# What a service's credential can be scoped to, as the service documents it. A concrete
+# credential's scope is declared by the operator (no API reveals it); the credential type
+# says what a scope can be, so the declaration is asked for and checked against it.
+ar:CredentialType a rdfs:Class ;
+  rdfs:comment "A kind of credential a service issues (e.g. a fine-grained personal access token): its resource owner, resource selection, permissions with their allowed levels, and what it always or never reaches." .
+ar:credentialTypeId a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range xsd:string .
+ar:credentialForService a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Root kind of the service whose resources the credential reaches." .
+ar:credentialForHost a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range xsd:string ;
+  rdfs:comment "Host the credential is presented to (an API or MCP endpoint)." .
+ar:resourceOwnerKind a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "One credential reaches resources of a single owner, of one of these kinds." .
+ar:hasResourceSelection a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:ResourceSelection .
+ar:ResourceSelection a rdfs:Class ;
+  rdfs:comment "One way a credential selects the owner's resources it reaches." .
+ar:selectionKey a rdf:Property ; rdfs:domain ar:ResourceSelection ; rdfs:range xsd:string .
+ar:selectsKind a rdf:Property ; rdfs:domain ar:ResourceSelection ; rdfs:range ar:WorldSurfaceKind .
+ar:selectedByName a rdf:Property ; rdfs:domain ar:ResourceSelection ; rdfs:range xsd:boolean ;
+  rdfs:comment "Resources are picked individually by name (no patterns)." .
+ar:selectionReadOnly a rdf:Property ; rdfs:domain ar:ResourceSelection ; rdfs:range xsd:boolean ;
+  rdfs:comment "The selection only allows reading, whatever the permissions." .
+ar:hasPermission a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:Permission .
+ar:Permission a rdfs:Class ;
+  rdfs:comment "One permission of a credential type. Each allowed level includes the lower ones (admin > write > read)." .
+ar:permissionKey a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range xsd:string .
+ar:permissionHeldBy a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Kind of resource the permission is granted on (a repository, the owner's account, an organization)." .
+ar:allowsLevel a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range xsd:string ;
+  rdfs:comment "A level the permission can be granted at: read, write, or admin. A permission without read is write-only." .
+ar:governsKind a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Reading instances of the kind needs this permission at read, changing them at write." .
+ar:governsReadOfKind a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range ar:WorldSurfaceKind ;
+  rdfs:comment "Reading instances of the kind needs this permission (changing them needs the ar:governsKind one)." .
+ar:askedFirst a rdf:Property ; rdfs:domain ar:Permission ; rdfs:range xsd:boolean ;
+  rdfs:comment "A commonly granted permission the operator is asked about one by one; the others in one question." .
+ar:alwaysReaches a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:AccessFact ;
+  rdfs:comment "Access every credential of the type has, whatever its declared scope." .
+ar:neverReaches a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range ar:AccessFact ;
+  rdfs:comment "Access no credential of the type has, whatever its declared scope." .
+ar:AccessFact a rdfs:Class .
+ar:accessEffect a rdf:Property ; rdfs:domain ar:AccessFact ; rdfs:range ar:EffectType ;
+  rdfs:comment "The effect (Read, or any change) the fact is about; absent means every effect." .
+ar:accessKind a rdf:Property ; rdfs:domain ar:AccessFact ; rdfs:range ar:WorldSurfaceKind .
+ar:accessCondition a rdf:Property ; rdfs:domain ar:AccessFact ; rdfs:range xsd:string ;
+  rdfs:comment "Which instances the fact covers, by attribute (e.g. public, owned-by-user); absent means all." .
+ar:maxLifetimeDays a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range xsd:integer .
+ar:mayNeverExpire a rdf:Property ; rdfs:domain ar:CredentialType ; rdfs:range xsd:boolean .

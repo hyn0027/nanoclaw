@@ -70,6 +70,15 @@ OneCLI dashboard and connect the service there.
 retry once they have connected. When they confirm, retry the original
 request. If the retry still fails, ask if they need help with the setup.
 
+**A 401 means a missing credential, not a policy block.** A remote MCP
+server that gets a 401 often falls back to OAuth sign-in: requests to
+`/.well-known/oauth-*` and `POST /register`. The gateway blocks those (403),
+but they are only a symptom; the cause is the 401. Tell the user the agent
+has no credential for that host and the operator needs to grant one (NanoClaw
+usually asks the operator itself, in a DM). Do not report it as a policy
+problem. A `<system_notice from="nanoclaw">` at the top of a turn says what
+NanoClaw already knows about a credential: trust it.
+
 ## Rules
 
 - **Never** say "I don't have access to X" without first making the HTTP

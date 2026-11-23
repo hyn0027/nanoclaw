@@ -9,6 +9,11 @@
  * file's only writer. After "Other", the operator's next DM is the answer. When the
  * question is answered, it confirms with a short DM.
  *
+ * The agent is told what a question settles (a granted credential, a saved scope), so the
+ * cards and the confirmation are sent as seen by the agent (no "not seen" note,
+ * host-only.ts); the prompt for typed answers and its acknowledgement are not (the agent
+ * never sees the operator's own words).
+ *
  * The recipient is picked like an approval's (global admins, then owners). Only that
  * user's answers count.
  */
@@ -28,7 +33,6 @@ import { pickApprovalDelivery, pickApprover } from '../approvals/primitive.js';
 const RUNTIME_DIR = path.join(DATA_DIR, 'ontology-runtime');
 const QUESTIONS_DIR = path.join(RUNTIME_DIR, 'questions');
 const ANSWERS_DIR = path.join(RUNTIME_DIR, 'answers');
-const ONTOLOGY_DIR = path.join(process.cwd(), 'ontology');
 const CARD_PREFIX = 'ontq-';
 const OTHER = { label: 'Other (please specify)', value: '@other' };
 const BACK = '@back'; // Python's "Back to the last question" choice
@@ -151,7 +155,7 @@ export async function deliverQuestions(): Promise<void> {
     const host = loadHost(q.id);
     if (q.status === 'answered') {
       if (!host.confirmed && host.target) {
-        await send(host.target, { text: `✅ ${q.title}: saved. ${q.result ?? ''}`.trim() });
+        await send(host.target, { text: `✅ ${q.title}: saved. ${q.result ?? ''}`.trim(), seenByAgent: true });
         saveHost(q.id, { ...host, confirmed: true });
       }
       continue;
@@ -163,10 +167,6 @@ export async function deliverQuestions(): Promise<void> {
       log.warn('Ontology question: no owner or admin reachable by DM', { questionId: q.id });
       continue;
     }
-    const terminal =
-      card.n === 1
-        ? `\n\n(Or answer in a terminal: \`cd ${ONTOLOGY_DIR} && .venv/bin/python ontology_runtime.py answer ${q.id}\`)`
-        : '';
     const options = withOther(card.options);
     // Recorded before sending, so a click can never arrive before its labels are known.
     saveHost(q.id, { ...host, target, cards: { ...host.cards, [card.n]: { title: card.title, options } } });
@@ -174,8 +174,9 @@ export async function deliverQuestions(): Promise<void> {
       type: 'ask_question',
       questionId: `${CARD_PREFIX}${q.id}-${card.n}`,
       title: card.title,
-      question: `${card.prompt}${terminal}`,
+      question: card.prompt,
       options: normalizeOptions(options),
+      seenByAgent: true,
     });
     const after = loadHost(q.id);
     saveHost(q.id, { ...after, sent: { ...after.sent, [card.n]: new Date().toISOString() } });
@@ -224,7 +225,7 @@ async function handleResponse(payload: ResponsePayload): Promise<boolean> {
     if (!target) return true;
     saveHost(q.id, { ...host, awaiting: { n, until: new Date(Date.now() + CAPTURE_WINDOW_MS).toISOString() } });
     await send(target, {
-      text: 'Type your answer in your own words in your next message here. It goes to the ontology, not to the agent.',
+      text: 'Type your answer in your own words as your next message here. The agent is told the result, not your words.',
     });
     return true;
   }

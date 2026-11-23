@@ -42,11 +42,13 @@ from ..materialize.gateway_policy import api_key
 from ..materialize.model import add_skill_graphs
 from . import base
 from .expand import skill_evidence
+from . import llm
 from .llm import LLMError, call
 from .paths import NANOCLAW, RUNTIME_DIR, SKILLS_SRC, session_dir
 from .store import now
 
-API = os.environ.get("ONECLI_URL", "http://127.0.0.1:10256").rstrip("/") + "/v1/cedar-policy"
+ONECLI = os.environ.get("ONECLI_URL", "http://127.0.0.1:10256").rstrip("/") + "/v1"
+API = ONECLI + "/cedar-policy"
 STATE = RUNTIME_DIR / "policies.json"
 TEMPLATE_DIR = RUNTIME_DIR / "policy-templates"
 SKILL_FILE = re.compile(r"skills/([A-Za-z0-9_.-]+)/SKILL\.md")
@@ -57,11 +59,17 @@ class PolicyError(RuntimeError):
 
 
 def api(method: str, path: str = "", body: object | None = None) -> object:
+    """OneCLI's cedar-policy API (``path`` under /v1/cedar-policy)."""
+    return onecli("/cedar-policy" + path, method, body)
+
+
+def onecli(path: str, method: str = "GET", body: object | None = None) -> object:
+    """Any OneCLI API call (``path`` under /v1), with NanoClaw's API key."""
     key = api_key(NANOCLAW / ".env")
     if not key:
         raise PolicyError("no ONECLI_API_KEY (environment or NanoClaw .env)")
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(API + path, data=data, method=method)
+    req = urllib.request.Request(ONECLI + path, data=data, method=method)
     req.add_header("Authorization", f"Bearer {key}")
     if data is not None:
         req.add_header("Content-Type", "application/json")
@@ -76,7 +84,7 @@ def api(method: str, path: str = "", body: object | None = None) -> object:
             detail = e.reason
         raise PolicyError(f"{method} {path or '/'}: HTTP {e.code}: {detail}") from e
     except urllib.error.URLError as e:
-        raise PolicyError(f"cannot reach {API}: {e.reason}") from e
+        raise PolicyError(f"cannot reach {ONECLI}: {e.reason}") from e
 
 
 # ── what is loaded ───────────────────────────────────────────────────────────
@@ -255,19 +263,7 @@ def same_content(group: dict, body: dict) -> bool:
 
 # ── generating a missing group ───────────────────────────────────────────────
 
-CEDAR_REFERENCE = """OneCLI gateway Cedar (one statement per policy; a request is allowed when some policy that is on permits it):
-- principal OneCLI::Agent::"<id>" (attributes id, identifier = NanoClaw agent group, name). Use plain `principal`: the group is a template, and NanoClaw narrows the principal to each agent in that agent's copy.
-- action OneCLI::Action::"GET" | "POST" | ... (exactly the HTTP method); several: action in [OneCLI::Action::"GET", OneCLI::Action::"HEAD"]; any: plain `action`.
-- resource OneCLI::Host::"api.example.com" (attribute name; wildcard: `resource` with `when { resource.name like "*.example.com" }`).
-- context: method, host, port, path, query (record), query_string, headers (record, lower-case), has_body, body, json, body_truncated,
-  has_credential, is_llm_host. Guard optional parts with `has` (context has json && context.json has method && ...).
-- annotations: @approval (hold for a human), @rate_limit("60/minute"). Do NOT use @approval here.
-Examples:
-permit(principal, action, resource == OneCLI::Host::"api.vercel.com");
-permit(principal, action in [OneCLI::Action::"GET", OneCLI::Action::"HEAD", OneCLI::Action::"OPTIONS"], resource) when { resource.name like "*.vercel.app" };
-permit(principal, action == OneCLI::Action::"POST", resource == OneCLI::Host::"api.githubcopilot.com") when {
-  context.path like "/mcp*" && context has json && context.json has method && context.json.method == "tools/call" &&
-  context.json has params && context.json.params has name && context.json.params.name == "issue_write" };"""
+# The Cedar reference and the system prompt are in ontology/llm.toml (policy_group_*).
 
 GROUP_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["description", "policies"],
@@ -280,20 +276,6 @@ GROUP_SCHEMA = {
     },
 }
 
-GROUP_SYSTEM = """You write OneCLI gateway Cedar policies for one AI-agent skill or MCP server. The gateway denies every \
-outbound request no policy permits. The group you write is switched on only while the agent has loaded this skill \
-or server, and it should allow every operation the skill or server legitimately needs (initially permissive within \
-its own destinations: all methods it may use on its hosts), and nothing beyond them. Never permit all hosts. No \
-@approval. Prefer one policy per destination or purpose, named so an operator recognizes it.
-
-Permit only destinations the skill itself must reach to do its own job: the hosts its scripts, CLIs or documented \
-workflow call. Hosts that appear only as examples or illustrations (sample curl lines, "e.g. Gmail, GitHub, Stripe") \
-are not needs. Never write a catch-all such as "any host the gateway holds a credential for" or "any connected \
-service": access to other services is granted by their own skills and MCP servers, never by this group. A skill that \
-only explains infrastructure or conventions (how the credential proxy works, how to format messages, how to behave) \
-grants nothing. If it needs no network access of its own, return no policies and say so in the description."""
-
-
 def skill_endpoints(name: str) -> list[str]:
     """Internet call patterns the skill's reviewed ontology declares (empty when it has none)."""
     g = Graph()
@@ -303,20 +285,18 @@ def skill_endpoints(name: str) -> list[str]:
 
 def draft_group(want: dict, error: str | None = None) -> dict:
     if want["kind"] == "skill":
-        subject = f"NanoClaw container skill '{want['name']}'"
+        subject = llm.prompt("policy_group_skill_subject", skill=want["name"])
         evidence = skill_evidence(want["name"])
-        endpoints = skill_endpoints(want["name"])
-        extra = f"Destinations its reviewed ontology declares: {', '.join(endpoints) or 'none'}."
+        extra = llm.prompt("policy_group_skill_destinations", endpoints=", ".join(skill_endpoints(want["name"])) or "none")
     else:
-        subject = f"MCP server '{want['server']}' at {want['endpoint']}"
-        evidence = "(no pinned tool snapshot; permit the MCP transport on its endpoint: JSON-RPC POST, plus GET and DELETE for streamable HTTP)"
+        subject = llm.prompt("policy_group_mcp_subject", server=want["server"], endpoint=want["endpoint"])
+        evidence = llm.prompt("policy_group_mcp_evidence")
         extra = ""
-    prompt = "\n\n".join(x for x in [
-        f"# Write the policy group for the {subject}", extra, CEDAR_REFERENCE,
-        "# Its files" if want["kind"] == "skill" else "# Its endpoint", evidence,
-        f"# The previous attempt was rejected by OneCLI's validator:\n{error}" if error else "",
-    ] if x)
-    return call(GROUP_SYSTEM, prompt, GROUP_SCHEMA)[0]
+    text = llm.prompt("policy_group_user", subject=subject, extra=extra,
+                      cedar_reference=llm.prompt("policy_group_cedar_reference"),
+                      evidence_heading="Its files" if want["kind"] == "skill" else "Its endpoint", evidence=evidence,
+                      previous_error=llm.prompt("policy_group_previous_error", error=error) if error else "")
+    return call(llm.prompt("policy_group_system"), text, GROUP_SCHEMA, task="policy_group")[0]
 
 
 def validate_template(template: dict) -> None:

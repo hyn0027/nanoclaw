@@ -17,7 +17,7 @@ ar:g_github_environment {
   ar:GitHubResource a ar:WorldSurfaceKind ;
     ar:specializesKind ar:RemoteService ;
     ar:protectedByKind ar:RemoteServiceAuthorizationControl ;
-    rdfs:comment "Anything stored at GitHub on behalf of its users. Access is limited by the token's scopes or permissions and by each user's role on the owning repository or organization." .
+    rdfs:comment "Anything stored at GitHub on behalf of its users. A credential reaches it within its user's own role on the owning repository or organization, further limited by the credential's scope (see ar:GitHubFineGrainedToken)." .
 
   # ── Accounts ──────────────────────────────────────────────────────────────
   ar:GitHubEnterprise a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
@@ -25,7 +25,7 @@ ar:g_github_environment {
   ar:GitHubOrganization a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
     rdfs:comment "An organization account owning repositories, teams, projects, and policy." .
   ar:GitHubUser a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
-    rdfs:comment "A user account (the token's own user among them): profile, owned repositories, gists, stars, notifications." .
+    rdfs:comment "A user account (the token's own user among them): profile, owned repositories, gists, stars, notifications, projects." .
   ar:GitHubTeam a ar:WorldSurfaceKind ; ar:specializesKind ar:GitHubResource ;
     rdfs:comment "A team within an organization; its members get the team's repository access." .
 
@@ -230,4 +230,111 @@ ar:g_github_environment {
     [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubWorkflowArtifact ; rdfs:comment "a run uploads artifacts" ],
     [ ar:onEffectType ar:Execute ; ar:effectType ar:Create ; ar:affectsKind ar:GitHubCheckRun ; rdfs:comment "a run reports checks" ],
     [ ar:onEffectType ar:Execute ; ar:effectType ar:Transmit ; ar:affectsKind ar:RemoteNetworkEndpoint ; rdfs:comment "runners reach the Internet, outside the OneCLI gateway, with the workflow's secrets" ] .
+
+  # ── Access model: fine-grained personal access tokens ───────────────────────
+  # From GitHub's documentation ("Managing your personal access tokens", fine-grained
+  # permission tables), checked 2026-11-23. A token acts as its user and never exceeds the
+  # user's own access; within that, it reaches one resource owner's resources, selected
+  # three ways, with per-permission levels. Account permissions apply only when the token's
+  # user is the owner; organization permissions only when an organization is.
+  ar:GitHubFineGrainedToken a ar:CredentialType ;
+    ar:credentialTypeId "github-fine-grained-token" ;
+    rdfs:label "GitHub fine-grained personal access token" ;
+    ar:credentialForService ar:GitHubResource ;
+    ar:credentialForHost "api.github.com", "api.githubcopilot.com" ;
+    ar:resourceOwnerKind ar:GitHubUser, ar:GitHubOrganization ;
+    ar:maxLifetimeDays 366 ;
+    ar:mayNeverExpire true ;
+    rdfs:comment "An organization may block fine-grained tokens, cap their lifetime, or require approval; until an approval, the token only reads public resources." ;
+    ar:hasResourceSelection
+      [ a ar:ResourceSelection ; ar:selectionKey "public" ; rdfs:label "Public repositories only (read-only)" ; ar:selectsKind ar:GitHubRepository ; ar:selectionReadOnly true ],
+      [ a ar:ResourceSelection ; ar:selectionKey "all" ; rdfs:label "All repositories of the owner" ; ar:selectsKind ar:GitHubRepository ],
+      [ a ar:ResourceSelection ; ar:selectionKey "selected" ; rdfs:label "Only selected repositories" ; ar:selectsKind ar:GitHubRepository ; ar:selectedByName true ] ;
+    ar:alwaysReaches
+      [ a ar:AccessFact ; ar:accessEffect ar:Read ; ar:accessKind ar:GitHubRepository ; ar:accessCondition "public" ;
+        rdfs:comment "Every fine-grained token can read all public repositories on GitHub." ] ;
+    ar:neverReaches
+      [ a ar:AccessFact ; ar:accessKind ar:GitHubCheckRun ; rdfs:comment "The Checks API is not available to fine-grained tokens." ],
+      [ a ar:AccessFact ; ar:accessKind ar:GitHubNotification ; rdfs:comment "The notifications API is not available to fine-grained tokens." ],
+      [ a ar:AccessFact ; ar:accessKind ar:GitHubProject ; ar:accessCondition "owned-by-user" ; rdfs:comment "Projects owned by a user account are not available to fine-grained tokens." ],
+      [ a ar:AccessFact ; ar:accessKind ar:GitHubProjectItem ; ar:accessCondition "owned-by-user" ; rdfs:comment "Projects owned by a user account are not available to fine-grained tokens." ],
+      [ a ar:AccessFact ; ar:accessKind ar:GitHubRepository ; ar:accessCondition "not-owner" ; rdfs:comment "Repositories of another owner (other users, other organizations, or ones the user is only an outside collaborator on) are reachable only as public repositories, read-only." ] ;
+    ar:hasPermission
+    [ a ar:Permission ; ar:permissionKey "actions" ; rdfs:label "Actions (workflow runs, jobs, artifacts)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubWorkflowRun, ar:GitHubWorkflowJob, ar:GitHubWorkflowArtifact ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "administration" ; rdfs:label "Administration (settings, collaborators, rulesets)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubRepository, ar:GitHubRepositoryCollaborator, ar:GitHubRuleset ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "artifact_metadata" ; rdfs:label "Artifact metadata" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "attestations" ; rdfs:label "Attestations" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "code_quality" ; rdfs:label "Code quality" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubCodeQualityFinding ] ,
+    [ a ar:Permission ; ar:permissionKey "security_events" ; rdfs:label "Code scanning alerts" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubCodeScanningAlert ] ,
+    [ a ar:Permission ; ar:permissionKey "codespaces" ; rdfs:label "Codespaces" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "codespaces_lifecycle_admin" ; rdfs:label "Codespaces lifecycle admin" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "codespaces_metadata" ; rdfs:label "Codespaces metadata" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "codespaces_secrets" ; rdfs:label "Codespaces secrets" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "statuses" ; rdfs:label "Commit statuses" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "contents" ; rdfs:label "Contents (code, commits, branches, tags, releases)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubBranch, ar:GitHubCommit, ar:GitHubRepositoryFile, ar:GitHubTag, ar:GitHubRelease ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "repository_custom_properties" ; rdfs:label "Custom properties" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubCustomProperty ] ,
+    [ a ar:Permission ; ar:permissionKey "vulnerability_alerts" ; rdfs:label "Dependabot alerts" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubDependabotAlert ] ,
+    [ a ar:Permission ; ar:permissionKey "dependabot_secrets" ; rdfs:label "Dependabot secrets" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "deployments" ; rdfs:label "Deployments" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "discussions" ; rdfs:label "Discussions" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubDiscussion, ar:GitHubDiscussionComment, ar:GitHubDiscussionCategory ] ,
+    [ a ar:Permission ; ar:permissionKey "environments" ; rdfs:label "Environments" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "issues" ; rdfs:label "Issues (issues, comments, labels, milestones)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubIssue, ar:GitHubIssueComment, ar:GitHubLabel, ar:GitHubMilestone, ar:GitHubIssueTypeOrField, ar:GitHubReaction, ar:GitHubCopilotTask ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "merge_queues" ; rdfs:label "Merge queues" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "metadata" ; rdfs:label "Metadata (always granted, read-only)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read" ; ar:governsReadOfKind ar:GitHubRepository, ar:GitHubRepositoryCollaborator ] ,
+    [ a ar:Permission ; ar:permissionKey "pages" ; rdfs:label "Pages" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "pull_requests" ; rdfs:label "Pull requests (pull requests, reviews, review comments)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubPullRequest, ar:GitHubPullRequestReview, ar:GitHubReviewComment ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "repository_advisories" ; rdfs:label "Repository security advisories" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubSecurityAdvisory ] ,
+    [ a ar:Permission ; ar:permissionKey "secret_scanning_alerts" ; rdfs:label "Secret scanning alerts" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubSecretScanningAlert ] ,
+    [ a ar:Permission ; ar:permissionKey "secrets" ; rdfs:label "Secrets" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "actions_variables" ; rdfs:label "Variables" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "repository_hooks" ; rdfs:label "Webhooks" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "workflows" ; rdfs:label "Workflows (files under .github/workflows; write only)" ; ar:permissionHeldBy ar:GitHubRepository ; ar:allowsLevel "write" ; ar:governsKind ar:GitHubWorkflow ; ar:askedFirst true ] ,
+    [ a ar:Permission ; ar:permissionKey "blocking" ; rdfs:label "Block another user" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "codespaces_user_secrets" ; rdfs:label "Codespaces user secrets" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "copilot_messages" ; rdfs:label "Copilot Chat" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "copilot_editor_context" ; rdfs:label "Copilot Editor Context" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "copilot_requests" ; rdfs:label "Copilot requests" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "emails" ; rdfs:label "Email addresses" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "user_events" ; rdfs:label "Events" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "followers" ; rdfs:label "Followers" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "gpg_keys" ; rdfs:label "GPG keys" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "gists" ; rdfs:label "Gists (write only)" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "write" ; ar:governsKind ar:GitHubGist ] ,
+    [ a ar:Permission ; ar:permissionKey "keys" ; rdfs:label "Git SSH keys" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "interaction_limits" ; rdfs:label "Interaction limits" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "knowledge_bases" ; rdfs:label "Knowledge bases" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "user_models" ; rdfs:label "Models" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "plan" ; rdfs:label "Plan" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "private_repository_invitations" ; rdfs:label "Private repository invitations" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "profile" ; rdfs:label "Profile (write only)" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "write" ; ar:governsKind ar:GitHubUser ] ,
+    [ a ar:Permission ; ar:permissionKey "git_signing_ssh_public_keys" ; rdfs:label "SSH signing keys" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "starring" ; rdfs:label "Starring" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubStar ] ,
+    [ a ar:Permission ; ar:permissionKey "watching" ; rdfs:label "Watching" ; ar:permissionHeldBy ar:GitHubUser ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_api_insights" ; rdfs:label "API Insights" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_administration" ; rdfs:label "Administration" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubOrganization, ar:GitHubRuleset ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_user_blocking" ; rdfs:label "Blocking users" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_campaigns" ; rdfs:label "Campaigns" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_custom_org_roles" ; rdfs:label "Custom organization roles" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_custom_properties" ; rdfs:label "Custom repository properties" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write", "admin" ; ar:governsKind ar:GitHubCustomProperty ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_custom_roles" ; rdfs:label "Custom repository roles" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_events" ; rdfs:label "Events" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_copilot_seat_management" ; rdfs:label "GitHub Copilot Business" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "issue_types" ; rdfs:label "Issue Types" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubIssueTypeOrField ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_knowledge_bases" ; rdfs:label "Knowledge bases" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "members" ; rdfs:label "Members (members and teams)" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ; ar:governsKind ar:GitHubTeam ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_models" ; rdfs:label "Models" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_network_configurations" ; rdfs:label "Network configurations" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_announcement_banners" ; rdfs:label "Organization announcement banners" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_codespaces" ; rdfs:label "Organization Codespaces" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_codespaces_secrets" ; rdfs:label "Organization Codespaces secrets" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_codespaces_settings" ; rdfs:label "Organization Codespaces settings" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_dependabot_secrets" ; rdfs:label "Organization Dependabot secrets" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_code_scanning_dismissal_requests" ; rdfs:label "Organization dismissal requests for code scanning" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_private_registries" ; rdfs:label "Organization private registries" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_plan" ; rdfs:label "Plan" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_projects" ; rdfs:label "Projects" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write", "admin" ; ar:governsKind ar:GitHubProject, ar:GitHubProjectItem ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_secrets" ; rdfs:label "Secrets" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_self_hosted_runners" ; rdfs:label "Self-hosted runners" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "team_discussions" ; rdfs:label "Team discussions" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_actions_variables" ; rdfs:label "Variables" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] ,
+    [ a ar:Permission ; ar:permissionKey "organization_hooks" ; rdfs:label "Webhooks" ; ar:permissionHeldBy ar:GitHubOrganization ; ar:allowsLevel "read", "write" ] .
 }

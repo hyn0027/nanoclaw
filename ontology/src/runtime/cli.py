@@ -7,6 +7,7 @@
     python3 ontology_runtime.py tick [--session <id>]                  # everything at once, by hand (and materialize)
     python3 ontology_runtime.py status | show | export [--session <id>]
     python3 ontology_runtime.py questions [--all] | answer <id> | ask-scope <credential>
+    python3 ontology_runtime.py add-credential [<question id>]          # store + grant a credential a question asks for
 
 A tick: (1) routes newly captured gateway calls to their sessions, (2) compares each
 session's agent group (skills, MCP servers, packages, credentials) with what its
@@ -29,7 +30,8 @@ from table_output import print_table, set_table_width
 from ..common.namespaces import AR
 from ..materialize.model import add_mcp_graphs, add_skill_graphs, load_model
 from . import base, capture, policies, questions, topics
-from .expand import SCHEMA, SYSTEM, batches, prompt, skill_evidence, to_graph
+from . import llm
+from .expand import SCHEMA, batches, prompt, skill_evidence, to_graph
 from .llm import LLMError, call
 from .paths import RUNTIME_DIR
 from .store import RT, SessionOntology, now
@@ -71,10 +73,10 @@ def run_expansion(ont: SessionOntology, model: Graph, *, trigger: str, title: st
     if dry_run:
         out = RUNTIME_DIR / "dry-run-prompt.txt"
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(SYSTEM + "\n\n" + text)
+        out.write_text(llm.prompt("expand_system") + "\n\n" + text)
         log(f"  dry run: prompt written to {out}")
         return None
-    proposal, usage = call(SYSTEM, text, SCHEMA, llm_model)
+    proposal, usage = call(llm.prompt("expand_system"), text, SCHEMA, llm_model, task="expand")
     graph, rejected, counts = to_graph(proposal, full, expansions, session_id=ont.session_id, expansion_id=expansion_id,
                                        status=status, call_ids=call_ids, source_skill=source_skill)
     node = next(graph.subjects(RT.expansionId, Literal(expansion_id)))
@@ -162,12 +164,11 @@ def expand_sources(ont: SessionOntology, fp: dict, modeled_mcp: dict, args, stri
         model = model or session_model(fp)
         if c["what"] == "skill":
             evidence = skill_evidence(c["name"])
-            title = f"skill {c['name']} (container/skills/{c['name']}), no reviewed model"
+            title = llm.prompt("expand_skill_title", skill=c["name"])
             source_skill = c["name"]
         else:
-            evidence = (f"The agent group's container now installs {c['name']}. Propose operations and kinds for what this "
-                        "package lets the agent reach or change, from your knowledge of it; mark evidence 'source'.")
-            title = f"package {c['name']} installed in the agent container"
+            evidence = llm.prompt("expand_package_evidence", package=c["name"])
+            title = llm.prompt("expand_package_title", package=c["name"])
             source_skill = None
         try:
             run_expansion(ont, model, trigger=f"{c['what']}:{c['name']}", title=title, evidence=evidence,
@@ -191,7 +192,7 @@ def expand_traffic(ont: SessionOntology, fp: dict, modeled_mcp: dict, args) -> N
     model = session_model(fp)
     for records, text, covered in batches(pending):
         try:
-            run_expansion(ont, model, trigger="traffic", title=f"{len(records)} distinct calls the gateway recorded for this agent",
+            run_expansion(ont, model, trigger="traffic", title=llm.prompt("expand_traffic_title", count=len(records)),
                           evidence=text, context=context_text(ont, fp, modeled_mcp), status=RT.ObservedTraffic,
                           call_ids=covered, source_skill=None, llm_model=args.model, dry_run=args.dry_run)
         except LLMError as e:
@@ -257,6 +258,12 @@ def sync_session(sess: dict, args) -> None:
     if args.skill and not policies.mark_loaded(sess["agent_group_id"], sess["id"], args.skill):
         log(f"{sess['id']}: skill {args.skill} is not a NanoClaw container skill; nothing to record for it")
     ont, fp, changes, modeled_mcp, new_session = update_base(sess)
+    # A host the agent needs with no credential granted: ask before the turn, so an MCP server
+    # connects after the grant instead of failing (and falling back to OAuth sign-up).
+    for q in topics.ask_credentials(sess["agent_group_id"], sess["id"]):
+        log(f"{sess['id']}: the agent waits for the answer to question {q['id']} ({q['title']})")
+        q = questions.wait(q, poll_s=2)
+        log(f"{sess['id']}: question {q['id']} answered: {q.get('result')}")
     for q in open_questions(sess, changes, new_session):
         log(f"{sess['id']}: the agent waits for the answer to question {q['id']} ({q['title']})")
         questions.wait(q, poll_s=2)
@@ -305,6 +312,11 @@ def cmd_sync(args) -> None:
         log(f"{sess['id']}: sync failed, the agent's action is refused: {e}")
         print(f"SYNC FAILED: {e}", file=sys.stderr, flush=True)
         sys.exit(2)
+    ont = SessionOntology(sess["agent_group_id"], sess["id"])  # re-read: the sync above saved it
+    notices = topics.credential_notices(sess["id"]) + topics.credentials_notice(sess["agent_group_id"], ont.state.setdefault("told", {}))
+    ont.save()
+    for notice in notices:
+        print(f"SYNC NOTICE: {notice}", file=sys.stderr, flush=True)  # the host hands it to the agent
     log(f"{sess['id']}: sync done" + (f" (skill {args.skill})" if args.skill else ""))
 
 
@@ -367,6 +379,11 @@ def cmd_answer(args) -> None:
         sys.exit(f"question {args.id} is {q['status']}: {q.get('result')}")
     q = questions.ask_tty(q)
     print(q.get("result") or q["status"])
+
+
+def cmd_add_credential(args) -> None:
+    q = topics.add_credential(args.id)
+    print(f"question {q['id']}: {q['result']}" if q else "that question was already answered")
 
 
 def cmd_policies(args) -> None:
@@ -525,9 +542,12 @@ def main() -> None:
     k.add_argument("credential", help="OneCLI secret name, e.g. GitHub")
     a = sub.add_parser("answer", help="answer a question in this terminal")
     a.add_argument("id")
+    ac = sub.add_parser("add-credential", help="store a new credential a question asks for (token typed hidden) and grant it")
+    ac.add_argument("id", nargs="?", help="question id (default: the only open missing-credential question)")
     for p in (s, sh, qs):
         p.add_argument("--width", type=int, help="fit tables into this many characters")
     args = parser.parse_args()
     set_table_width(getattr(args, "width", None))
     {"tick": cmd_tick, "sync": cmd_sync, "status": cmd_status, "show": cmd_show, "export": cmd_export,
-     "questions": cmd_questions, "answer": cmd_answer, "policies": cmd_policies, "ask-scope": cmd_ask_scope}[args.cmd](args)
+     "questions": cmd_questions, "answer": cmd_answer, "policies": cmd_policies, "ask-scope": cmd_ask_scope,
+     "add-credential": cmd_add_credential}[args.cmd](args)

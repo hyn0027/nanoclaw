@@ -3,8 +3,8 @@
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
-from fnmatch import fnmatchcase
 
+from ....common import credential_types as ct_model
 from ....common.paths import MCP_DIR
 from ...probe import ProbeError
 from ..model import Instance
@@ -13,65 +13,77 @@ from ..registry import Context, environment
 SERVER_ID = "mcp-github"
 KINDS = ["GitHubUser", "GitHubRepository", "GitHubWorkflow"]
 
-# Fine-grained token permission each repository-held kind needs, for a declared scope
-# ({"permissions": {"issues": "write", ...}}). "metadata" is always readable.
-PERMISSION = {
-    "GitHubIssue": "issues", "GitHubIssueComment": "issues", "GitHubLabel": "issues", "GitHubMilestone": "issues",
-    "GitHubIssueTypeOrField": "issues", "GitHubReaction": "issues",
-    "GitHubPullRequest": "pull_requests", "GitHubPullRequestReview": "pull_requests", "GitHubReviewComment": "pull_requests",
-    "GitHubBranch": "contents", "GitHubCommit": "contents", "GitHubRepositoryFile": "contents", "GitHubTag": "contents",
-    "GitHubRelease": "contents", "GitHubCopilotTask": "contents",
-    "GitHubWorkflow": "workflows", "GitHubWorkflowRun": "actions", "GitHubWorkflowJob": "actions", "GitHubWorkflowArtifact": "actions",
-    "GitHubCheckRun": "checks",
-    "GitHubDiscussion": "discussions", "GitHubDiscussionComment": "discussions", "GitHubDiscussionCategory": "discussions",
-    "GitHubRepository": "administration", "GitHubRuleset": "administration", "GitHubRepositoryCollaborator": "administration",
-    "GitHubCustomProperty": "administration",
-    "GitHubCodeScanningAlert": "security_events", "GitHubCodeQualityFinding": "security_events",
-    "GitHubSecretScanningAlert": "secret_scanning_alerts", "GitHubDependabotAlert": "dependabot_alerts",
-    "GitHubSecurityAdvisory": "repository_advisories",
-}
-LEVEL = {"none": 0, "read": 1, "write": 2}
-
-# Fine-grained user permission each account-held kind needs ({"user_permissions": {...}}).
-USER_PERMISSION = {
-    "GitHubUser": "profile", "GitHubRepository": "administration", "GitHubGist": "gists", "GitHubStar": "starring", "GitHubProject": "projects",
-    "GitHubCopilotSpace": "copilot", "GitHubNotification": "notifications",
-}
-
-# Reading these needs a different permission than changing them (a repository's metadata
-# is readable with "metadata"; changing its settings needs "administration").
-READ_PERMISSION = {"GitHubRepository": "metadata"}
+# What a declared scope allows comes from the credential type in the ontology
+# (ar:GitHubFineGrainedToken in ontology/mcp/github-environment.trig): which permission
+# governs each kind, at which levels, and what the token never reaches.
+CREDENTIAL_TYPE = "github-fine-grained-token"
+REPOSITORY = "GitHubRepository"
 
 
-def declared_level(scope: dict, repo: str, kind: str, read: bool = False) -> int:
-    """Access level (0 none, 1 read, 2 write) a declared scope gives on ``kind`` in ``repo``
-    (``read``: for a read, which may need a different permission)."""
-    if not any(fnmatchcase(repo, pattern) for pattern in scope.get("repositories", [])):
+def credential_type() -> ct_model.CredentialType:
+    return ct_model.credential_types()[CREDENTIAL_TYPE]
+
+
+def in_scope(scope: dict, login: str):
+    """full_name -> whether the declared selection grants that repository (public-only grants none).
+    A token reaches one owner's repositories: the declared owner, or the token's own user."""
+    owner = ((scope.get("owner") or {}).get("name") or login).lower()
+    selection = scope.get("selection")
+    if selection == "all":
+        return lambda name: name.split("/", 1)[0].lower() == owner
+    if selection == "selected":
+        names = {(r if "/" in r else f"{owner}/{r}").lower() for r in scope.get("resources") or []}
+        return lambda name: name.lower() in names
+    return lambda name: False
+
+
+def _repository_permission(kind: str, read: bool) -> ct_model.Permission | None:
+    ct = credential_type()
+    if read:
+        found = next((p for p in ct.permissions if kind in p.governs_read), None)
+        if found:
+            return found
+    return next((p for p in ct.permissions if kind in p.governs and p.held_by == REPOSITORY), None)
+
+
+def declared_level(scope: dict, granted, repo: str, kind: str, read: bool = False) -> int:
+    """Access level (0 none, 1 read, 2 write) the declared scope gives on ``kind`` in ``repo``."""
+    if not granted(repo):
         return 0
-    permissions = scope.get("permissions", "*")
-    if permissions == "*":
-        return 2
-    perm = (READ_PERMISSION.get(kind) if read else None) or PERMISSION.get(kind)
-    return LEVEL.get(permissions.get(perm, "none"), 0) if perm else 1
+    perm = _repository_permission(kind, read)
+    if perm is None:
+        return 1  # no permission governs it: readable with the repository
+    level = "read" if perm.levels == ("read",) else (scope.get("permissions") or {}).get(perm.key)  # read-only ones (metadata) always hold
+    return 2 if ct_model.level_at_least(level, "write") else 1 if ct_model.level_at_least(level, "read") else 0
 
 
-def access_check(ctx: Context, scope: dict):
-    """check(instance, kind, effect): False when the declared token scope cannot do the effect
-    on that instance (its repository is outside the scope, or the permission is too low);
-    reads of public repositories are always possible."""
+def access_check(ctx: Context, scope: dict, login: str):
+    """check(instance, kind, effect): False when the declared scope cannot do the effect on that
+    instance, or no token of this type can; reads of public repositories are always possible."""
+    ct = credential_type()
+    granted = in_scope(scope, login)
+    owner_kind = (scope.get("owner") or {}).get("kind")
+    never = {f.kind for f in ct.never if f.condition is None}
+    never_for_user_owner = {f.kind for f in ct.never if f.condition == "owned-by-user"}
+    perms = scope.get("permissions") or {}
+
     def check(instance: Instance, kind: str, effect: str):
+        if kind in never or (kind in never_for_user_owner and ct_model.owner_role(owner_kind or "") == "user"):
+            return False
         inst = ctx.instances
-        repo = next((inst.by_id[i] for i in inst.lineage(instance.id) if inst.by_id[i].kind == "GitHubRepository"), None)
+        repo = next((inst.by_id[i] for i in inst.lineage(instance.id) if inst.by_id[i].kind == REPOSITORY), None)
         if repo is None:
-            # account-held (the user's gists, stars, profile): the token's user permissions
-            if kind not in USER_PERMISSION or effect == "Read":
+            # held by the owner's account or organization: its permission, if the owner is of that kind
+            held = next((p for p in ct.permissions if kind in p.governs and p.held_by != REPOSITORY), None)
+            if held is None or effect == "Read":
                 return None
-            user = scope.get("user_permissions", "*")
-            return None if user == "*" or LEVEL.get(user.get(USER_PERMISSION[kind], "none"), 0) >= 2 else False
+            if held.held_by != owner_kind:
+                return False
+            return None if ct_model.level_at_least(perms.get(held.key), "write") else False
         if effect == "Read" and not repo.attrs.get("private"):
             return None
         need = 1 if effect == "Read" else 2
-        return None if declared_level(scope, repo.attrs.get("match", ""), kind, read=effect == "Read") >= need else False
+        return None if declared_level(scope, granted, repo.attrs.get("match", ""), kind, read=effect == "Read") >= need else False
     return check
 
 
@@ -141,16 +153,16 @@ def github(ctx: Context) -> None:
         # Not observable: ask the operator (terminal, or a NanoClaw DM) and wait for the answer.
         from ....runtime.topics import require
         session = ctx.snap.facts["session"]
-        if require(session["agent_group_id"], session["id"], "github"):
+        if require(session["agent_group_id"], session["id"], CREDENTIAL_TYPE):
             declaration = ctx.declared(host)
     scope = declaration.scope if declaration else None
-    patterns = (scope or {}).get("repositories", [])
-    declared = lambda name: any(fnmatchcase(name, p) for p in patterns)  # noqa: E731
+    declared = in_scope(scope, me["login"]) if scope else (lambda name: True)
     if scope is not None:
         # checked against everything the token sees, before trimming
-        for pattern in patterns:
-            if not any(fnmatchcase(r["full_name"], pattern) for r in repos):
-                ctx.warn(f"declared repository {pattern} is not among the repositories the token sees (search user:{me['login']}); "
+        for name in scope.get("resources") or []:
+            full = name if "/" in name else f"{(scope.get('owner') or {}).get('name') or me['login']}/{name}"
+            if not any(r["full_name"].lower() == full.lower() for r in repos):
+                ctx.warn(f"declared repository {full} is not among the repositories the token sees (search user:{me['login']}); "
                          "it may belong to an organization, or the declaration is wrong")
         for r in repos:
             if r.get("private") and not declared(r["full_name"]):
@@ -205,13 +217,13 @@ def github(ctx: Context) -> None:
         ctx.note(["GitHubRepository"], f"no declared scope for the credential at {host}: every repository the token sees counts as writable "
                                        "(declare one with: ontology_runtime.py ask-scope <credential>)")
         return
-    ctx.restrict(f"outside the GitHub token scope {declaration.describe()}", access_check(ctx, scope))
+    ctx.restrict(f"outside the GitHub token scope {declaration.describe()}", access_check(ctx, scope, me["login"]))
+    governed = sorted({k for p in credential_type().permissions if p.held_by == REPOSITORY for k in (*p.governs, *p.governs_read)})
     for repo in ctx.instances.by_kind.get("GitHubRepository", []):
         if repo.attrs.get("aggregate"):
             repo.attrs["declared_access"] = "read (any token)"
             continue
-        level = max((declared_level(scope, repo.attrs["match"], k, read) for k in PERMISSION for read in (False, True)), default=0)
+        level = max((declared_level(scope, declared, repo.attrs["match"], k, read) for k in governed for read in (False, True)), default=0)
         repo.attrs["declared_access"] = ("write" if level == 2 else "read" if level == 1 else "none") + " (declared)"
-    ctx.note(["GitHubRepository"], f"scope {declaration.describe()}: repositories {', '.join(patterns) or 'none'}; "
-                                   f"permissions {json.dumps(scope.get('permissions', '*'))}; user permissions {json.dumps(scope.get('user_permissions', '*'))}"
+    ctx.note(["GitHubRepository"], f"scope {declaration.describe()}: {ct_model.describe_scope(credential_type(), scope)}"
                                    + (f"; expires {declaration.expires}" if declaration.expires else ""))

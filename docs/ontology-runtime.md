@@ -171,8 +171,23 @@ Until then materialize waits (in a terminal it asks; without one it waits for th
 and the runtime holds that session's expansions; captured calls stay pending, nothing is
 assumed. `ontology_runtime.py questions` lists open questions. The engine is
 `ontology/src/runtime/questions.py`; topics (fields, guidance for Claude, optional fixed steps,
-where the answer is saved) are in `ontology/src/runtime/topics.py` (`TOPICS`). A new environment
-is one more `Topic`; the host's card code does not change.
+where the answer is saved) are in `ontology/src/runtime/topics.py` (`TOPICS`). A credential's
+scope question is generated from its type in the ontology (`ar:CredentialType`, e.g.
+`ar:GitHubFineGrainedToken` in `ontology/ontology/mcp/github-environment.trig`): the owner, how
+resources are selected, one card per common permission offering only the levels it allows,
+one card for the other permissions, and expiry. A new service's credential is a new
+`ar:CredentialType` in the ontology; neither the question code nor the host's card code changes.
+The agent is told every credential it holds, with its declared scope and what its type always
+or never reaches, once per session and whenever that changes.
+
+## Model calls and prompts
+
+Every model call (expansions, policy drafts, question cards, reading "Other" answers, joint-risk
+annotation) goes to Claude through headless Claude Code (`claude -p`) on the operator's
+subscription, with no tools (no web, shell, or files), no MCP servers, no settings files and
+no saved session. The settings (model, effort, fallback model, timeout, workers, per task) and
+every prompt are in one file, `ontology/llm.toml`; edits apply to the next call. A command's
+`--model` and the `ONTOLOGY_MODEL` variable override the model.
 
 ## Commands
 

@@ -10,6 +10,7 @@
  * slow tick (remote mailbox, many sessions) neither serializes every
  * session's latency nor adds a full interval of dead time after it.
  */
+import { markHostOnly } from './host-only.js';
 import {
   getRunningSessions,
   getActiveSessions,
@@ -146,8 +147,24 @@ const adapterReadyCallbacks: AdapterReadyCallback[] = [];
 /** Current delivery adapter or null if not yet set. Modules use this in live
  *  message-flow handlers where the adapter is guaranteed to be set. For
  *  boot-time setup (before the adapter is ready), use onDeliveryAdapterReady. */
+let hostAdapter: ChannelDeliveryAdapter | null = null;
+
+/**
+ * The adapter for messages the host sends itself (approvals, questions, notices): the agent
+ * never sees them, so each is marked as such (host-only.ts). The agent's own messages use
+ * `deliveryAdapter` directly, unmarked.
+ */
+function hostOnly(adapter: ChannelDeliveryAdapter): ChannelDeliveryAdapter {
+  return {
+    ...adapter,
+    deliver: (channelType, platformId, threadId, kind, content, files, instance) =>
+      adapter.deliver(channelType, platformId, threadId, kind, markHostOnly(content), files, instance),
+    ...(adapter.setTyping ? { setTyping: adapter.setTyping.bind(adapter) } : {}),
+  };
+}
+
 export function getDeliveryAdapter(): ChannelDeliveryAdapter | null {
-  return deliveryAdapter;
+  return deliveryAdapter && hostAdapter;
 }
 
 export function onDeliveryAdapterReady(cb: AdapterReadyCallback): void {
@@ -155,19 +172,20 @@ export function onDeliveryAdapterReady(cb: AdapterReadyCallback): void {
   if (deliveryAdapter) {
     // Already set — fire immediately so late registrations still run.
     void Promise.resolve()
-      .then(() => cb(deliveryAdapter as ChannelDeliveryAdapter))
+      .then(() => cb(hostAdapter as ChannelDeliveryAdapter))
       .catch((err) => log.error('onDeliveryAdapterReady callback threw', { err }));
   }
 }
 
 export function setDeliveryAdapter(adapter: ChannelDeliveryAdapter): void {
   deliveryAdapter = adapter;
+  hostAdapter = hostOnly(adapter);
   // Forward to the typing module so it can fire setTyping on its own
   // interval. Direct call, not a registry — typing is a default module.
   setTypingAdapter(adapter);
   for (const cb of adapterReadyCallbacks) {
     void Promise.resolve()
-      .then(() => cb(adapter))
+      .then(() => cb(hostAdapter as ChannelDeliveryAdapter))
       .catch((err) => log.error('onDeliveryAdapterReady callback threw', { err }));
   }
 }

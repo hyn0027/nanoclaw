@@ -21,6 +21,7 @@ from rdflib.namespace import OWL, RDF, RDFS
 
 from ..common.namespaces import AR
 from ..common.rdf import short
+from . import llm
 from .paths import SKILLS_SRC
 from .store import RT
 
@@ -100,41 +101,7 @@ SCHEMA = {
     },
 }
 
-SYSTEM = """You extend a security ontology of an AI agent's environment. The agent runs in a \
-NanoClaw container; everything it can reach is modeled as kinds (classes of world resources), \
-how they contain or reference each other, what effects operations have on them, and how the \
-environment itself reacts to effects (mayTrigger: when X undergoes effect A, the environment may \
-cause effect B on Y, e.g. a new GitHub issue notifies watchers, a notification is emailed, a \
-mailing list forwards it to its members).
-
-Your job: from the evidence given, propose ONLY additions the evidence supports, so the ontology \
-covers what this agent's environment actually contains and how it propagates effects:
-- new kinds the evidence reveals (notification channels, people, email addresses, mailing lists, \
-  webhooks, integrations, apps, teams, ...), placed with specializes / contained_in / references / \
-  shares / stored_as against EXISTING kind names where possible;
-- updates to existing kinds (a containment or reference the base lacks), never renaming or removing;
-- environment reactions (triggers) the payloads show or that the revealed configuration implies \
-  (a webhook URL on a repository, a notification setting, a subscription, a forwarding rule);
-- operations, only when the evidence is a skill, package, or an MCP tool listing with no reviewed model;
-- concrete instances: the actual repositories, users, email addresses, lists, channels, apps the \
-  payloads name, with containment (in) and attributes copied from the payload. Prefer instances \
-  over abstractions: "hyn0027/agent-playground", not "a repository";
-- links between instances (member_of, delivers_to, owned_by, subscribed_to, same_as, ...);
-- correspondences between kinds of DIFFERENT environments that can denote the same real-world \
-  thing (a GitHub user's email and a Gmail address; a Slack user and a GitHub user), so separate \
-  ontologies connect.
-
-Credentials are not data: a request the gateway sends with an injected credential is just a request \
-to that host. What the credential reaches there (the account, its repositories, projects, mailboxes, \
-messages ...) is modeled only as that service's own detailed kinds: when traffic reaches a service \
-whose data has no kinds yet, add them (under RemoteService, or under the service's existing kinds), \
-never a generic "connected service data" kind.
-
-Rules: use existing kind names exactly as listed. New kind names are PascalCase and prefixed with \
-their environment (GitHubWebhook, GmailLabel). Every item cites evidence: the call ids it comes \
-from, or "source". Do not invent instances or values that are not in the evidence. Secrets never \
-appear in evidence (they are masked as ***); never reconstruct them. If the evidence adds nothing, \
-set nothing_new to true and leave the lists empty."""
+# The system prompt and the prompt layout are in ontology/llm.toml (expand_system, expand_user).
 
 
 def kind_catalog(model: Graph) -> str:
@@ -241,13 +208,9 @@ def skill_evidence(name: str) -> str:
 
 
 def prompt(model: Graph, expansions: Graph, session_id: str, evidence_title: str, evidence: str, context: str) -> str:
-    return "\n\n".join([
-        f"# Session {session_id}", context,
-        "# Existing world kinds (name <: specializes, contains[...] — comment)", kind_catalog(model),
-        "# Existing invocation surface kinds (for operations.invoked_through)", invocation_kinds(model),
-        "# This session's runtime additions so far", runtime_state(expansions, session_id),
-        f"# Evidence: {evidence_title}", evidence,
-    ])
+    return llm.prompt("expand_user", session_id=session_id, context=context, kinds=kind_catalog(model),
+                      invocations=invocation_kinds(model), runtime_state=runtime_state(expansions, session_id),
+                      evidence_title=evidence_title, evidence=evidence)
 
 
 # ── turning a proposal into RDF ──────────────────────────────────────────────

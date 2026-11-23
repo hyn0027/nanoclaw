@@ -15,10 +15,12 @@ resources), keyed by OneCLI credential name:
           "secretId": "...",              # the OneCLI secret declared about
           "secretUpdatedAt": "...",       # its updated_at then; a later value means the token changed
           "declaredAt": "2026-10-16T...Z",
-          "scope": {                      # environment-specific; GitHub: see envs/github.py
-            "repositories": ["hyn0027/agent-playground"],
-            "permissions": "*",           # or {"issues": "write", "contents": "read", ...}
-            "user_permissions": {}        # "*" (default) or account-level ones; {} = none
+          "scope": {                      # checked against the credential type in the ontology
+            "credentialType": "github-fine-grained-token",   # ar:credentialTypeId (src/common/credential_types.py)
+            "owner": {"kind": "GitHubUser", "name": null},    # one resource owner; null name = the token's own user
+            "selection": "selected",      # one of the type's ar:selectionKey values
+            "resources": ["hyn0027/agent-playground"],        # for a by-name selection
+            "permissions": {"contents": "write", "issues": "read"}   # key -> allowed level
           },
           "expiresAt": "2027-01-14",      # optional; after it, the declaration is stale
           "note": "fine-grained PAT, one repository"
@@ -71,7 +73,9 @@ def for_host(secrets: list[dict], host: str, path: Path = PATH) -> Declaration |
             continue
         d = declared[s["name"]]
         stale = None
-        if d.get("secretId") and d["secretId"] != s.get("id"):
+        if "credentialType" not in (d.get("scope") or {}):
+            stale = "it was saved before the credential's access model was corrected"
+        elif d.get("secretId") and d["secretId"] != s.get("id"):
             stale = "the credential was replaced by a different OneCLI secret since the declaration"
         elif d.get("secretUpdatedAt") and s.get("updatedAt") and str(s["updatedAt"]) > str(d["secretUpdatedAt"]):
             stale = f"the credential was updated ({s['updatedAt']}) after the declaration"

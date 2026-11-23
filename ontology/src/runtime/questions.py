@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from . import llm
 from .llm import LLMError, call
 from .paths import RUNTIME_DIR
 from .store import now, write_atomic
@@ -58,7 +59,7 @@ class Step:
     prompt: str
     options: list[dict]
     asks: tuple[str, ...] = ()  # skipped once these fields are filled (e.g. by an Other answer)
-    when: Callable[[dict], bool] | None = None  # (choices so far) -> whether it applies
+    when: Callable[[dict], bool] | None = None  # (fields so far) -> whether it applies
     filled: Callable[[dict], bool] | None = None  # overrides the ``asks`` check
 
     def is_filled(self, fields: dict) -> bool:
@@ -78,6 +79,7 @@ class Topic:
     steps: Callable[[dict], list[Step]] = lambda meta: []  # fixed steps for the question's meta
     context: Callable[[dict], str] = lambda meta: ""  # what is known, for Claude
     hosts: tuple[str, ...] = ()  # credentials used at these hosts are asked about
+    confirm: bool = True  # False: save as soon as every field is filled, without the confirm card
 
 
 def _topic(q: dict) -> Topic:
@@ -150,7 +152,7 @@ def _steps(topic: Topic, q: dict) -> list[Step]:
 
 
 def _pending(topic: Topic, q: dict) -> Step | None:
-    return next((s for s in _steps(topic, q) if s.id not in q["choices"] and (s.when is None or s.when(q["choices"]))
+    return next((s for s in _steps(topic, q) if s.id not in q["choices"] and (s.when is None or s.when(q["fields"]))
                  and not s.is_filled(q["fields"])), None)
 
 
@@ -182,11 +184,9 @@ def _generate(topic: Topic, q: dict) -> Step:
             "type": "object", "additionalProperties": False, "required": ["label", "updates"],
             "properties": {"label": {"type": "string", "description": "button text, at most 60 characters"},
                            "updates": _update_schema(topic)}}}}}
-    system = (f"You ask an operator multiple-choice questions to fill in what NanoClaw needs to know about a {topic.what}. "
-              f"{topic.guidance} Write the single next question, covering one or a few of the missing fields, with at most "
-              f"{MAX_CHOICES} likely answers; each answer's updates fill the fields it settles (null for the rest). The "
-              "operator can always answer in their own words instead, so do not add an 'other' option.")
-    result, _ = call(system, f"{_state(topic, q)}\nMissing: {', '.join(missing)}", schema)
+    system = llm.prompt("question_generate_system", what=topic.what, guidance=topic.guidance, max_choices=MAX_CHOICES)
+    result, _ = call(system, llm.prompt("question_generate_user", state=_state(topic, q), missing=", ".join(missing)),
+                     schema, task="question_generate")
     options = [{"label": o["label"][:80], "value": str(i), "set": {k: v for k, v in o["updates"].items() if v is not None and k in missing}}
                for i, o in enumerate(result["options"])]
     asks = sorted({k for o in options for k in o["set"]}) or missing
@@ -219,8 +219,24 @@ def _show(q: dict, card: dict) -> None:
     q["card"] = {**card, "n": q["n"], "options": options}
 
 
+def _named(value) -> bool:
+    return isinstance(value, list) and all(isinstance(x, dict) and "name" in x for x in value)
+
+
 def _apply(q: dict, updates: dict) -> None:
-    q["fields"].update({k: v for k, v in updates.items() if k in q["fields"] and v is not None})
+    """Fill fields from updates. A list of named items (e.g. permissions) is merged by name, so
+    an answer about some items keeps the others; an item with level "none" is removed."""
+    for k, v in updates.items():
+        if k not in q["fields"] or v is None:
+            continue
+        old = q["fields"][k]
+        if _named(v) and _named(old):
+            merged = {x["name"]: x for x in old}
+            merged.update({x["name"]: x for x in v})
+            v = list(merged.values())
+        if _named(v):
+            v = [x for x in v if x.get("level") != "none"]
+        q["fields"][k] = v
 
 
 def _interpret(topic: Topic, q: dict, step_id: str, text: str) -> None:
@@ -229,13 +245,11 @@ def _interpret(topic: Topic, q: dict, step_id: str, text: str) -> None:
         "understood": {"type": "boolean", "description": "false only when the answer settles nothing"},
         "unclear": {"type": ["string", "null"], "description": "what is missing or ambiguous, when understood is false"},
         "updates": _update_schema(topic)}}
-    system = (f"An operator answered a question about a {topic.what} in their own words. {topic.guidance} Fill every field "
-              "the answer settles (it may answer more than the question asked, or correct earlier answers); null for the rest. "
-              "Never invent values the answer and the context do not support.")
+    system = llm.prompt("question_interpret_system", what=topic.what, guidance=topic.guidance)
     card = q["card"]
-    prompt = (f"{_state(topic, q)}\n\nThe question: {card['prompt']}\nIts choices: {', '.join(o['label'] for o in card['options'])}"
-              f"\n\nThe operator's answer:\n{text}")
-    result, _ = call(system, prompt, schema)
+    prompt = llm.prompt("question_interpret_user", state=_state(topic, q), question=card["prompt"],
+                        choices=", ".join(o["label"] for o in card["options"]), answer=text)
+    result, _ = call(system, prompt, schema, task="question_interpret")
     if step_id == KEEP:
         _apply(q, q["existing"])  # changes relative to the saved answer
     _apply(q, result["updates"])
@@ -281,11 +295,17 @@ def advance(q: dict) -> dict | None:
             q.update(fields=dict.fromkeys(topic.fields), choices={}, generated=[])
         else:
             step = next((s for s in _steps(topic, q) if s.id == step_id), None)
-            option = next((o for o in (step.options if step else []) if o["value"] == given.get("choice")), None)
+            if step is None:  # the card's step no longer exists (the topic changed): show the next card instead
+                _next_card(topic, q)
+                save(q)
+                return None
+            option = next((o for o in step.options if o["value"] == given.get("choice")), None)
             if option is None:
                 return None
             q["choices"][step_id] = option["value"]
             _apply(q, option["set"](q["fields"]) if callable(option.get("set")) else option.get("set") or {})
+        if not topic.confirm and not _missing(q):
+            return _finish(topic, q, given)
         q["history"].append({"n": card["n"], "step": step_id, "answer": given, "at": now()})
         if (q["fields"], q["choices"]) != (before["fields"], before["choices"]):
             q.setdefault("undo", []).append(before)  # an answer that settled nothing is not a step back
@@ -300,6 +320,19 @@ def _finish(topic: Topic, q: dict, given: dict) -> dict:
     q.update(status="answered", answered_at=now(), card=None)
     save(q)
     return q
+
+
+def complete(q: dict, fields: dict, how: str) -> dict | None:
+    """Answer an open question outside its cards (e.g. a terminal command that did what it
+    asks for): set ``fields`` and save. None when it was no longer open."""
+    QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(QUESTIONS_DIR / f"{q['id']}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        q = get(q["id"]) or q
+        if q["status"] != "open":
+            return None
+        q["fields"] = {**q["fields"], **fields}
+        return _finish(_topic(q), q, {"done": how})
 
 
 def own_words(q: dict) -> list[str]:
