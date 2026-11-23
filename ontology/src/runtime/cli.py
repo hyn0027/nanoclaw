@@ -1,6 +1,7 @@
 """Keep each NanoClaw session's ontology current.
 
     python3 ontology_runtime.py sync --session <id> [--skill <name>]   # blocking, before the agent acts (host-run)
+    python3 ontology_runtime.py sync --session <id> --sources          # after the agent was answered: expand one queued source (host-run)
     python3 ontology_runtime.py sync --session <id> --traffic          # end of a turn: expand from its calls (host-run)
     python3 ontology_runtime.py policies [--no-generate]               # reconcile OneCLI agent copies (host-run at start)
     python3 ontology_runtime.py tick [--session <id>]                  # everything at once, by hand (and materialize)
@@ -27,7 +28,7 @@ from table_output import print_table, set_table_width
 
 from ..common.namespaces import AR
 from ..materialize.model import add_mcp_graphs, add_skill_graphs, load_model
-from . import base, capture, policies, questions, scope_questions
+from . import base, capture, policies, questions, topics
 from .expand import SCHEMA, SYSTEM, batches, prompt, skill_evidence, to_graph
 from .llm import LLMError, call
 from .paths import RUNTIME_DIR
@@ -130,15 +131,15 @@ def open_questions(sess: dict, changes: list[dict], new_session: bool) -> list[d
     """Ask what only the operator knows (e.g. a token's scope) and move open questions on.
     Returns the session's questions still waiting for an answer."""
     if not new_session and changes:
-        for q in scope_questions.on_connect(sess["agent_group_id"], sess["id"], changes):
+        for q in topics.on_connect(sess["agent_group_id"], sess["id"], changes):
             log(f"{sess['id']}: asking question {q['id']} ({q['title']}): {q['intro'].split('.')[0]}")
-    scope_questions.needed(sess["agent_group_id"], [sess["id"]])
+    topics.needed(sess["agent_group_id"], [sess["id"]])
     waiting = []
     for q in questions.all_questions():
         if q["status"] != "open" or sess["id"] not in q["sessions"]:
             continue
         try:
-            scope_questions.advance(q)  # interprets a plain-language answer, or applies a complete one
+            questions.advance(q)  # applies an answer that arrived
         except LLMError as e:
             log(f"{sess['id']}: question {q['id']}: could not interpret the answer yet: {e}")
         q = questions.get(q["id"]) or q
@@ -149,10 +150,14 @@ def open_questions(sess: dict, changes: list[dict], new_session: bool) -> list[d
     return waiting
 
 
-def expand_sources(ont: SessionOntology, fp: dict, modeled_mcp: dict, args, strict: bool) -> None:
-    """Propose graphs for the queued sources. ``strict``: the first failure raises SyncFailed."""
-    queue = list(ont.state.get("pending_sources", []))
+def expand_sources(ont: SessionOntology, fp: dict, modeled_mcp: dict, args, strict: bool,
+                   only: tuple[str, str] | None = None, limit: int | None = None) -> bool:
+    """Propose graphs for the queued sources (``only`` one (what, name); at most ``limit``).
+    ``strict``: the first failure raises SyncFailed. Returns False when one failed (it stays queued)."""
+    queue = [c for c in ont.state.get("pending_sources", []) if only is None or (c["what"], c["name"]) == only]
+    queue = queue[:limit] if limit else queue
     model = None
+    ok = True
     for c in queue:
         model = model or session_model(fp)
         if c["what"] == "skill":
@@ -172,9 +177,11 @@ def expand_sources(ont: SessionOntology, fp: dict, modeled_mcp: dict, args, stri
             log(f"{ont.session_id}: expansion for {c['what']} {c['name']} failed: {e}")
             if strict:
                 raise SyncFailed(f"ontology expansion for {c['what']} {c['name']} failed: {e}") from e
+            ok = False
             continue
         ont.state["pending_sources"] = [q for q in ont.state.get("pending_sources", []) if q != c]
         ont.save()
+    return ok
 
 
 def expand_traffic(ont: SessionOntology, fp: dict, modeled_mcp: dict, args) -> None:
@@ -243,16 +250,18 @@ def run_lock(blocking: bool):
 
 def sync_session(sess: dict, args) -> None:
     """Blocking sync before the agent acts (a new turn, or loading a skill): base changes,
-    the operator's answers (waits for them), expansions for new sources, and the agent's
-    OneCLI policy copies. Raises SyncFailed when any of it cannot finish."""
+    the operator's answers (waits for them), the loaded skill's expansion, and the agent's
+    OneCLI policy copies. Other queued sources expand in the background afterwards
+    (``--sources``): policies use only reviewed graphs, so nothing waits for them.
+    Raises SyncFailed when any of it cannot finish."""
     if args.skill and not policies.mark_loaded(sess["agent_group_id"], sess["id"], args.skill):
         log(f"{sess['id']}: skill {args.skill} is not a NanoClaw container skill; nothing to record for it")
     ont, fp, changes, modeled_mcp, new_session = update_base(sess)
     for q in open_questions(sess, changes, new_session):
         log(f"{sess['id']}: the agent waits for the answer to question {q['id']} ({q['title']})")
-        questions.wait(q, scope_questions.advance, poll_s=2)
-        scope_questions.advance(q)
-    expand_sources(ont, fp, modeled_mcp, args, strict=True)
+        questions.wait(q, poll_s=2)
+    if args.skill:
+        expand_sources(ont, fp, modeled_mcp, args, strict=True, only=("skill", args.skill))
     try:
         summary = policies.reconcile(generate=True, log=log)
     except (policies.PolicyError, LLMError) as e:
@@ -268,6 +277,15 @@ def cmd_sync(args) -> None:
     if not sess or sess.get("status") != "active":
         sys.exit(f"no active session {args.session}")
     lock = run_lock(blocking=True)  # noqa: F841 - kept referenced; a sync waits, never skips
+    if args.sources:
+        # in the background, after the agent was answered: one queued source per run, so a
+        # sync never waits behind more than one. Exit 3: more are queued; 1: this one failed.
+        ont = SessionOntology(sess["agent_group_id"], sess["id"])
+        fp = ont.state["base"]
+        if not fp or not ont.state.get("pending_sources"):
+            return
+        ok = expand_sources(ont, fp, base.modeled_mcp(fp["mcp_servers"]), args, strict=False, limit=1)
+        sys.exit(1 if not ok else 3 if ont.state.get("pending_sources") else 0)
     if args.traffic:
         # end of a turn: expand from the calls it made (never blocks the agent; failures retry next turn)
         route_capture(args.keep_calls)
@@ -323,18 +341,17 @@ def cmd_questions(args) -> None:
     for q in questions.all_questions():
         if q["status"] != "open" and not args.all:
             continue
-        given = questions.answers(q)
-        step = questions.next_step(q, given) if q["status"] == "open" else None
-        rows.append((q["id"], q["status"], q["title"], ", ".join(q["sessions"]), f"{len(given)} answered",
-                     step["prompt"] if step else (q.get("result") or "-")))
+        card = q.get("card")
+        rows.append((q["id"], q["status"], q["title"], ", ".join(q["sessions"]), f"{len(q.get('history', []))} answered",
+                     card["prompt"].splitlines()[-1] if card else (q.get("result") or "-")))
     if not rows:
         print("no open questions" if not args.all else "no questions")
         return
-    print_table("Questions", ("Id", "Status", "Question", "Sessions", "Progress", "Next step / result"), rows, (10, 9, 40, 30, 12, 70))
+    print_table("Questions", ("Id", "Status", "Question", "Sessions", "Progress", "Current card / result"), rows, (10, 9, 40, 30, 12, 70))
 
 
 def cmd_ask_scope(args) -> None:
-    opened = scope_questions.reopen(args.credential)
+    opened = topics.reopen(args.credential)
     if not opened:
         sys.exit(f"no active session's agent is granted a credential named {args.credential!r}")
     for q in opened:
@@ -348,9 +365,8 @@ def cmd_answer(args) -> None:
         sys.exit(f"no question {args.id}")
     if q["status"] != "open":
         sys.exit(f"question {args.id} is {q['status']}: {q.get('result')}")
-    questions.ask_tty(q)
-    done = scope_questions.advance(q)
-    print(done["result"] if done else "not complete yet")
+    q = questions.ask_tty(q)
+    print(q.get("result") or q["status"])
 
 
 def cmd_policies(args) -> None:
@@ -491,6 +507,7 @@ def main() -> None:
     sy.add_argument("--session", required=True)
     sy.add_argument("--skill", help="the agent is loading this skill")
     sy.add_argument("--traffic", action="store_true", help="end of a turn: expand from captured calls (non-blocking use)")
+    sy.add_argument("--sources", action="store_true", help="expand one queued source (skill, package) in the background")
     sy.set_defaults(dry_run=False, keep_calls=False, model=None)  # model: ONTOLOGY_MODEL or the subscription default
     s = sub.add_parser("status")
     s.add_argument("--session")

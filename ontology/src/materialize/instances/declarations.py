@@ -26,7 +26,7 @@ resources), keyed by OneCLI credential name:
       }
     }
 
-Written by the runtime's scope questions (src/runtime/scope_questions.py); ask again with
+Written by the runtime's operator questions (src/runtime/topics.py); ask again with
 ``python3 ontology_runtime.py ask-scope <credential>``.
 """
 

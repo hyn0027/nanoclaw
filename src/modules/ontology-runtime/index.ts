@@ -9,11 +9,15 @@
  *     (container config: skills, MCP servers, packages; Claude settings; the installed
  *     container skills; OneCLI credential grants) is unchanged since the session's last
  *     sync, the answer is immediate. Otherwise `ontology_runtime.py sync --session` runs:
- *     base changes, the operator's answers (it waits for them), expansions for new
- *     sources, and the agent's OneCLI policy groups. An approved MCP server or package
- *     restarts the container, so its first turn is where that change is synced.
+ *     base changes, the operator's answers (it waits for them) and the agent's OneCLI
+ *     policy groups. An approved MCP server or package restarts the container, so its
+ *     first turn is where that change is synced.
  *   - `ontology_sync` reason "skill", before the agent loads a skill: the same sync with
- *     `--skill`, which also makes and switches on that skill's policy group.
+ *     `--skill`, which also expands that skill (when it has no reviewed graph) and makes
+ *     and switches on its policy group.
+ *   - after either, in the background (nobody waits): `sync --sources` expands the other
+ *     queued sources (skills with no reviewed graph, added packages), one per run so a
+ *     later sync waits behind at most one. Policies use only reviewed graphs.
  *   - `ontology_turn_end`, after every turn (nobody waits): `sync --traffic` expands from
  *     the calls the gateway recorded for the turn.
  *
@@ -66,6 +70,12 @@ const queues = new Map<string, Promise<unknown>>();
 const inFlight = new Set<string>();
 /** Sessions with a traffic expansion queued but not started. */
 const trafficQueued = new Set<string>();
+/** Sessions whose queued sources are being expanded in the background. */
+const expanding = new Set<string>();
+/** Sessions whose last background expansion failed: retried on their next turn. */
+const retrySources = new Set<string>();
+/** `sync --sources` exit 3: it expanded one source and more are queued. */
+const MORE_SOURCES = 'more sources queued';
 
 function enqueue<T>(sessionId: string, job: () => Promise<T>): Promise<T> {
   const next = (queues.get(sessionId) ?? Promise.resolve()).then(job, job);
@@ -166,6 +176,7 @@ function runRuntime(args: string[]): Promise<string | null> {
       children.delete(child);
       fs.closeSync(out);
       if (code === 0) resolve(null);
+      else if (code === 3) resolve(MORE_SOURCES);
       else
         resolve(
           failure ||
@@ -192,6 +203,12 @@ async function reply(session: Session, requestId: string, error: string | null):
 async function handleSync(session: Session, requestId: string, reason: string, skill: string | null): Promise<void> {
   if (!running) return reply(session, requestId, null); // runtime off: never hold the agent
   const started = Date.now();
+  // An unchanged setup answers at once, without queueing behind a background expansion.
+  if (reason === 'turn' && synced.get(session.id) === (await setupFingerprint(session.agent_group_id))) {
+    await reply(session, requestId, null);
+    if (retrySources.delete(session.id)) expandInBackground(session);
+    return;
+  }
   const error = await enqueue(session.id, async () => {
     if (reason === 'skill' && skill) {
       return runRuntime(['sync', '--session', session.id, '--skill', skill]);
@@ -203,10 +220,27 @@ async function handleSync(session: Session, requestId: string, reason: string, s
     return failed;
   });
   await reply(session, requestId, error);
+  if (!error) expandInBackground(session);
   const ms = Date.now() - started;
   if (error)
     log.warn('Ontology sync failed; the agent action is refused', { sessionId: session.id, reason, skill, error });
   else if (ms > 2_000) log.info('Ontology sync done', { sessionId: session.id, reason, skill, ms });
+}
+
+/** Expand the session's queued sources after the agent was answered, one per run. */
+function expandInBackground(session: Session): void {
+  if (!running || expanding.has(session.id)) return;
+  expanding.add(session.id);
+  const step = (): void => {
+    void enqueue(session.id, () => runRuntime(['sync', '--session', session.id, '--sources'])).then((error) => {
+      if (running && error === MORE_SOURCES) return step();
+      expanding.delete(session.id);
+      if (error) retrySources.add(session.id);
+      if (error)
+        log.warn('Ontology source expansion failed; retried after the next sync', { sessionId: session.id, error });
+    });
+  };
+  step();
 }
 
 registerDeliveryAction(

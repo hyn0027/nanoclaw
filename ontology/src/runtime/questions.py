@@ -1,42 +1,91 @@
-"""Questions for the operator when materialize or the runtime needs a fact it cannot observe.
+"""Questions for the operator: multiple-choice cards, each also answerable in their own words.
 
-Today one kind exists: the scope of a granted credential (which repositories a GitHub
-token reaches, with which permissions). No API reveals a fine-grained token's scope,
-and probing it with writes is not acceptable, so the operator is asked once; the answer
-becomes a declaration in local/credential-scopes.json (declarations.py) that later runs
-trust. A declaration that goes stale (the token was replaced, updated, or expired) asks
-again.
+A question is about one *topic* (topics.py): fields the ontology needs but cannot observe,
+such as what a GitHub token can do. It is asked one card at a time. Every card has up to
+MAX_CHOICES choices plus "Other (please specify)". Cards come from:
+- the topic's fixed steps, which are choice questions that fill fields;
+- Claude, which writes the next choice question from the topic's field schema when no
+  fixed step is left and fields are still missing.
+An "Other" answer is read by Claude against the schema and fills whatever fields it covers;
+steps whose fields are then filled are skipped. When a saved answer exists, the first card
+asks whether it still holds. When every field is filled, a last card shows what will be
+saved and asks to confirm.
+Every card after the first also has "Back to the last question": it undoes the last answer
+(choice or Other) and shows that card again.
 
-A question is a list of steps, each a prompt with at most five options (it must fit a
-row of chat buttons). A step may apply only after an earlier answer (``when``), and may
-accept typed text in the terminal (``free_text``).
+Files under data/ontology-runtime/:
+- questions/<id>.json is written only by Python. It holds the topic, the fields so far, and
+  `card`, the one card waiting for an answer: {n, title, prompt, options: [{label, value}]}.
+- answers/<id>.json is written only by the host:
+  {"answers": {"<card n>": {"choice": value} | {"other": text}}}.
+- answers/<id>.terminal.json holds the same, from `ontology_runtime.py answer <id>`.
+NanoClaw's host (src/modules/ontology-runtime/questions.ts) shows each card as a DM with
+buttons, adds the Other button, and records answers; all logic is here. Whoever waits on
+a question (a blocking sync, materialize, the terminal) calls advance() to move it on.
 
-Where it is asked:
-- materialize run in a terminal asks right there (ask_tty);
-- otherwise the question is written to data/ontology-runtime/questions/<id>.json and
-  NanoClaw's host (src/modules/ontology-runtime) DMs the owner one button card per
-  step, recording each click in data/ontology-runtime/answers/<id>.json. Python is the
-  only writer of questions/, the host the only writer of answers/ (the terminal answer
-  command writes answers/<id>.terminal.json);
-- ``ontology_runtime.py answer <id>`` answers an open question in the terminal.
-
-Until a question is answered, materialize waits and the runtime holds expansions for
-the sessions it concerns (the operator's choice: wait rather than assume).
+Until a question is answered, the sessions it concerns wait (the operator's choice:
+wait rather than assume).
 """
 
+import copy
+import fcntl
 import json
 import secrets
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
+from .llm import LLMError, call
 from .paths import RUNTIME_DIR
 from .store import now, write_atomic
 
 QUESTIONS_DIR = RUNTIME_DIR / "questions"
 ANSWERS_DIR = RUNTIME_DIR / "answers"
-MAX_OPTIONS = 5
+MAX_CHOICES = 4  # plus the host's "Other" button: five, one row of chat buttons
+KEEP = "keep"
+BACK = {"label": "← Back to the last question", "value": "@back"}
+UNDOABLE = ("fields", "choices", "generated", "history", "card")
+CONFIRM = "confirm"
 
+
+@dataclass
+class Step:
+    """A choice question. Each option is {label, value, set}, where ``set`` is the field
+    updates it makes: a dict, or a function of the current fields returning one."""
+    id: str
+    prompt: str
+    options: list[dict]
+    asks: tuple[str, ...] = ()  # skipped once these fields are filled (e.g. by an Other answer)
+    when: Callable[[dict], bool] | None = None  # (choices so far) -> whether it applies
+    filled: Callable[[dict], bool] | None = None  # overrides the ``asks`` check
+
+    def is_filled(self, fields: dict) -> bool:
+        if self.filled:
+            return self.filled(fields)
+        return bool(self.asks) and all(fields.get(a) is not None for a in self.asks)
+
+
+@dataclass
+class Topic:
+    name: str
+    what: str  # "GitHub token"
+    fields: dict  # JSON-schema properties; every one must be filled
+    guidance: str  # for Claude: what the fields mean and how to fill them
+    describe: Callable[[dict], str]  # fields -> one line the operator can confirm
+    save: Callable[[dict, dict], str]  # (question, fields) -> result line
+    steps: Callable[[dict], list[Step]] = lambda meta: []  # fixed steps for the question's meta
+    context: Callable[[dict], str] = lambda meta: ""  # what is known, for Claude
+    hosts: tuple[str, ...] = ()  # credentials used at these hosts are asked about
+
+
+def _topic(q: dict) -> Topic:
+    from .topics import TOPICS
+    return TOPICS[q["topic"]]
+
+
+# ── storage ──────────────────────────────────────────────────────────────────
 
 def _write(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,24 +105,8 @@ def save(q: dict) -> None:
     _write(QUESTIONS_DIR / f"{q['id']}.json", q)
 
 
-def open_question(key: str, title: str, intro: str, steps: list[dict], meta: dict, sessions: list[str]) -> dict:
-    """The open question for ``key``, created if there is none. Steps are checked to fit chat buttons."""
-    for s in steps:
-        assert 1 <= len(s["options"]) <= MAX_OPTIONS, s["id"]
-    for q in all_questions():
-        if q["key"] == key and q["status"] == "open":
-            if set(sessions) - set(q["sessions"]):
-                q["sessions"] = sorted(set(q["sessions"]) | set(sessions))
-                save(q)
-            return q
-    q = {"id": "q" + secrets.token_hex(4), "key": key, "title": title, "intro": intro, "steps": steps, "meta": meta,
-         "sessions": sorted(sessions), "status": "open", "created_at": now()}
-    save(q)
-    return q
-
-
 def answers(q: dict) -> dict:
-    """step id -> answer value, from the host (chat) and the terminal; the terminal wins."""
+    """card n (as a string) -> {"choice": v} | {"other": text}, from chat and the terminal; the terminal wins."""
     out = {}
     for name in (f"{q['id']}.json", f"{q['id']}.terminal.json"):
         path = ANSWERS_DIR / name
@@ -85,162 +118,245 @@ def answers(q: dict) -> dict:
     return out
 
 
-# ── answering in plain language ──────────────────────────────────────────────
-# Besides the choices, the operator can describe the answer in their own words (the
-# first step's "@nl" option, or words typed at any terminal prompt). The text is the
-# answer to the pseudo-step DESCRIBE; Python interprets it with Claude and appends a
-# confirmation step "nl.confirm.<n>" (yes / again / choices). While a description is
-# in play the choice steps are skipped; "choices" goes back to them.
-NL = "@nl"
-DESCRIBE = "describe"
-CONFIRM = "nl.confirm."
-NL_OPTION = {"label": "Describe it in my own words", "value": NL}
+def open_question(topic: Topic, key: str, title: str, intro: str, meta: dict, sessions: list[str],
+                  existing: dict | None = None) -> dict:
+    """The open question for ``key``, created (with its first card) if there is none.
+    ``existing``: the saved answer's fields, offered to keep."""
+    for q in all_questions():
+        if q.get("key") == key and q["status"] == "open":
+            if set(sessions) - set(q["sessions"]):
+                q["sessions"] = sorted(set(q["sessions"]) | set(sessions))
+                save(q)
+            return q
+    q = {"id": "q" + secrets.token_hex(4), "key": key, "topic": topic.name, "title": title, "intro": intro,
+         "meta": meta, "sessions": sorted(sessions), "status": "open", "created_at": now(),
+         "existing": existing, "fields": dict.fromkeys(topic.fields), "choices": {}, "generated": [],
+         "history": [], "n": 0, "card": None}
+    _next_card(topic, q)
+    save(q)
+    return q
 
 
-def latest_confirm(q: dict) -> dict | None:
-    confirms = [s for s in q["steps"] if s["id"].startswith(CONFIRM)]
-    return confirms[-1] if confirms else None
+# ── the engine ───────────────────────────────────────────────────────────────
+
+def _steps(topic: Topic, q: dict) -> list[Step]:
+    steps = []
+    if q.get("existing"):
+        steps.append(Step(KEEP, f"Saved answer: {topic.describe(q['existing'])}. Still right?",
+                          [{"label": "Yes, keep it", "value": "keep"}, {"label": "No, change it", "value": "change"}]))
+    steps += topic.steps(q["meta"])
+    steps += [Step(g["id"], g["prompt"], g["options"], tuple(g["asks"])) for g in q["generated"]]
+    return steps
 
 
-def nl_mode(q: dict, given: dict) -> bool:
-    latest = latest_confirm(q)
-    return DESCRIBE in given and not (latest and given.get(latest["id"]) == "choices")
+def _pending(topic: Topic, q: dict) -> Step | None:
+    return next((s for s in _steps(topic, q) if s.id not in q["choices"] and (s.when is None or s.when(q["choices"]))
+                 and not s.is_filled(q["fields"])), None)
 
 
-def applies(step: dict, given: dict, q: dict | None = None) -> bool:
-    """A step's ``when`` is one condition or a list of them (all must hold). In plain-
-    language mode only the latest confirmation applies."""
-    if q is not None and step["id"].startswith(CONFIRM):
-        return nl_mode(q, given) and step is latest_confirm(q)
-    if q is not None and nl_mode(q, given):
-        return False
-    cond = step.get("when")
-    conds = [] if cond is None else cond if isinstance(cond, list) else [cond]
-    return all(given.get(c["step"]) in c["in"] for c in conds)
+def _missing(q: dict) -> list[str]:
+    return [k for k, v in q["fields"].items() if v is None]
 
 
-def next_step(q: dict, given: dict) -> dict | None:
-    return next((s for s in q["steps"] if applies(s, given, q) and s["id"] not in given), None)
+def _update_schema(topic: Topic) -> dict:
+    """Every field, each null when not covered."""
+    return {"type": "object", "additionalProperties": False, "required": list(topic.fields),
+            "properties": {k: {"anyOf": [s, {"type": "null"}], **({"description": s["description"]} if "description" in s else {})}
+                           for k, s in topic.fields.items()}}
 
 
-def complete(q: dict, given: dict | None = None) -> bool:
-    given = answers(q) if given is None else given
-    if nl_mode(q, given):
-        latest = latest_confirm(q)
-        return bool(latest) and given.get(latest["id"]) == "yes" and q.get("interpretation", {}).get("text") == given[DESCRIBE]
-    return next_step(q, given) is None
+def _state(topic: Topic, q: dict) -> str:
+    return "\n".join(filter(None, [
+        topic.context(q["meta"]),
+        f"Saved answer from before: {topic.describe(q['existing'])}" if q.get("existing") else "",
+        f"Fields so far (null = not yet known): {json.dumps(q['fields'])}",
+    ]))
 
 
-def needs_interpretation(q: dict, given: dict | None = None) -> str | None:
-    """The description to interpret, when it has no current interpretation yet."""
-    given = answers(q) if given is None else given
-    if not nl_mode(q, given):
-        return None
-    text = given[DESCRIBE]
-    return text if q.get("interpretation", {}).get("text") != text else None
+def _generate(topic: Topic, q: dict) -> Step:
+    """Claude writes the next choice question for the missing fields."""
+    missing = _missing(q)
+    schema = {"type": "object", "additionalProperties": False, "required": ["prompt", "options"], "properties": {
+        "prompt": {"type": "string", "description": "one short question to the operator"},
+        "options": {"type": "array", "minItems": 2, "maxItems": MAX_CHOICES, "items": {
+            "type": "object", "additionalProperties": False, "required": ["label", "updates"],
+            "properties": {"label": {"type": "string", "description": "button text, at most 60 characters"},
+                           "updates": _update_schema(topic)}}}}}
+    system = (f"You ask an operator multiple-choice questions to fill in what NanoClaw needs to know about a {topic.what}. "
+              f"{topic.guidance} Write the single next question, covering one or a few of the missing fields, with at most "
+              f"{MAX_CHOICES} likely answers; each answer's updates fill the fields it settles (null for the rest). The "
+              "operator can always answer in their own words instead, so do not add an 'other' option.")
+    result, _ = call(system, f"{_state(topic, q)}\nMissing: {', '.join(missing)}", schema)
+    options = [{"label": o["label"][:80], "value": str(i), "set": {k: v for k, v in o["updates"].items() if v is not None and k in missing}}
+               for i, o in enumerate(result["options"])]
+    asks = sorted({k for o in options for k in o["set"]}) or missing
+    g = {"id": f"gen{len(q['generated']) + 1}", "prompt": result["prompt"], "options": options, "asks": asks}
+    q["generated"].append(g)
+    return Step(g["id"], g["prompt"], options, tuple(asks))
 
 
-def add_interpretation(q: dict, text: str, result: dict) -> dict:
-    """Record Claude's reading of ``text`` and append the step that confirms it."""
-    n = sum(1 for s in q["steps"] if s["id"].startswith(CONFIRM)) + 1
-    q["interpretation"] = {"text": text, "result": result, "at": now()}
-    if result.get("understood"):
-        prompt = f"I understood: {result['summary'].rstrip('. ')}. Correct?"
-        options = [{"label": "Yes, save it", "value": "yes"}, {"label": "No, let me describe it again", "value": "again"},
-                   {"label": "Use the choices instead", "value": "choices"}]
+def _next_card(topic: Topic, q: dict) -> None:
+    step = _pending(topic, q)
+    if step is None and _missing(q):
+        step = _generate(topic, q)
+    if step is None:
+        step = Step(CONFIRM, f"I'll save: {topic.describe(q['fields'])}. Correct?",
+                    [{"label": "Yes, save it", "value": "yes"}, {"label": "Start over", "value": "restart"}])
+    prompt = step.prompt
+    if note := q.pop("note", None):
+        prompt = f"{note}\n\n{prompt}"
+    if q["n"] == 0:
+        prompt = f"{q['intro']}\n\n{prompt}"
+    _show(q, {"step": step.id, "title": q["title"], "prompt": prompt,
+              "options": [{"label": o["label"], "value": o["value"]} for o in step.options[:MAX_CHOICES]]})
+
+
+def _show(q: dict, card: dict) -> None:
+    """Make ``card`` the current one, under a new number (answers are keyed by it), with
+    Back when there is an answer to undo."""
+    q["n"] += 1
+    options = [o for o in card["options"] if o["value"] != BACK["value"]] + ([BACK] if q.get("undo") else [])
+    q["card"] = {**card, "n": q["n"], "options": options}
+
+
+def _apply(q: dict, updates: dict) -> None:
+    q["fields"].update({k: v for k, v in updates.items() if k in q["fields"] and v is not None})
+
+
+def _interpret(topic: Topic, q: dict, step_id: str, text: str) -> None:
+    """Claude reads an Other answer: fills the fields it covers, or notes what is unclear."""
+    schema = {"type": "object", "additionalProperties": False, "required": ["understood", "unclear", "updates"], "properties": {
+        "understood": {"type": "boolean", "description": "false only when the answer settles nothing"},
+        "unclear": {"type": ["string", "null"], "description": "what is missing or ambiguous, when understood is false"},
+        "updates": _update_schema(topic)}}
+    system = (f"An operator answered a question about a {topic.what} in their own words. {topic.guidance} Fill every field "
+              "the answer settles (it may answer more than the question asked, or correct earlier answers); null for the rest. "
+              "Never invent values the answer and the context do not support.")
+    card = q["card"]
+    prompt = (f"{_state(topic, q)}\n\nThe question: {card['prompt']}\nIts choices: {', '.join(o['label'] for o in card['options'])}"
+              f"\n\nThe operator's answer:\n{text}")
+    result, _ = call(system, prompt, schema)
+    if step_id == KEEP:
+        _apply(q, q["existing"])  # changes relative to the saved answer
+    _apply(q, result["updates"])
+    if result["understood"]:
+        if step_id != CONFIRM:
+            q["choices"][step_id] = "@other"
     else:
-        prompt = f"I couldn't work it out: {result.get('unclear') or result['summary']}"
-        options = [{"label": "Describe it again", "value": "again"}, {"label": "Use the choices instead", "value": "choices"}]
-    q["steps"].append({"id": f"{CONFIRM}{n}", "prompt": prompt, "options": options})
+        q["note"] = f"I couldn't work that out: {result.get('unclear') or 'please try again'}"
+
+
+def advance(q: dict) -> dict | None:
+    """Apply the answer to the current card, if there is one, and make the next card.
+    Returns the question when this closed it. Locked, so two waiters never apply the same
+    answer twice. Raises LLMError when Claude is needed and fails (retried next time)."""
+    QUESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(QUESTIONS_DIR / f"{q['id']}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        q = get(q["id"]) or q
+        if q["status"] != "open":
+            return None
+        topic = _topic(q)
+        card = q["card"]
+        given = answers(q).get(str(card["n"]))
+        if not given:
+            return None
+        step_id = card["step"]
+        if given.get("choice") == BACK["value"]:
+            if q.get("undo"):  # back to the card before, as it was before it was answered
+                previous = q["undo"].pop()
+                q.update(previous)
+                _show(q, previous["card"])
+                save(q)
+            return None
+        before = copy.deepcopy({k: q[k] for k in UNDOABLE})
+        if "other" in given:
+            _interpret(topic, q, step_id, given["other"])
+        elif step_id == CONFIRM and given.get("choice") == "yes":
+            return _finish(topic, q, given)
+        elif step_id == KEEP and given.get("choice") == "keep":
+            q["fields"] = dict(q["existing"])
+            return _finish(topic, q, given)
+        elif step_id == CONFIRM:  # start over
+            q.update(fields=dict.fromkeys(topic.fields), choices={}, generated=[])
+        else:
+            step = next((s for s in _steps(topic, q) if s.id == step_id), None)
+            option = next((o for o in (step.options if step else []) if o["value"] == given.get("choice")), None)
+            if option is None:
+                return None
+            q["choices"][step_id] = option["value"]
+            _apply(q, option["set"](q["fields"]) if callable(option.get("set")) else option.get("set") or {})
+        q["history"].append({"n": card["n"], "step": step_id, "answer": given, "at": now()})
+        if (q["fields"], q["choices"]) != (before["fields"], before["choices"]):
+            q.setdefault("undo", []).append(before)  # an answer that settled nothing is not a step back
+        _next_card(topic, q)
+        save(q)
+    return None
+
+
+def _finish(topic: Topic, q: dict, given: dict) -> dict:
+    q["history"].append({"n": q["card"]["n"], "step": q["card"]["step"], "answer": given, "at": now()})
+    q["result"] = topic.save(q, q["fields"])
+    q.update(status="answered", answered_at=now(), card=None)
     save(q)
     return q
 
 
-def finish(q: dict, apply) -> dict:
-    """Apply the answers (``apply(q, answers)`` returns a description) and close the question."""
-    given = answers(q)
-    q["result"] = apply(q, given)
-    q["answers"] = given
-    q["status"] = "answered"
-    q["answered_at"] = now()
-    save(q)
-    return q
+def own_words(q: dict) -> list[str]:
+    """The operator's Other answers, for a saved note."""
+    return [h["answer"]["other"] for h in q.get("history", []) if "other" in h["answer"]]
 
+
+# ── asking ───────────────────────────────────────────────────────────────────
 
 def ask_tty(q: dict) -> dict:
-    """Ask every applicable step in the terminal; returns the answers (also saved, so a
-    chat card for the same question stops at the next step)."""
-    given = answers(q)
-    print(f"\n── {q['title']} ──\n{q['intro']}\n(At any prompt you can answer in your own words: type d, or just write it.)\n", file=sys.stderr)
-
-    def record(key: str, value: str) -> None:
-        given[key] = value
-        _write(ANSWERS_DIR / f"{q['id']}.terminal.json", {"answers": given, "updated_at": now()})
-
-    def describe() -> str:
-        return input("describe the access in your own words: ").strip()
-
-    while True:
-        if (text := needs_interpretation(q, given)) is not None:
-            print("  … working out what that means", file=sys.stderr, flush=True)
-            interpret(q, text)
-            q.update(get(q["id"]) or q)
-        step = next_step(q, given)
-        if step is None:
-            break
-        print(step["prompt"], file=sys.stderr)
-        for i, o in enumerate(step["options"], 1):
+    """Ask the question in this terminal until it is answered. Answers are saved where the
+    chat card sees them, so a card for the same question stops."""
+    print(f"\n── {q['title']} ──", file=sys.stderr)
+    if q["n"] > 1:
+        print(q["intro"], file=sys.stderr)
+    while (q := get(q["id"]) or q)["status"] == "open":
+        card = q["card"]
+        print(f"\n{card['prompt']}", file=sys.stderr)
+        for i, o in enumerate(card["options"], 1):
             print(f"  {i}. {o['label']}", file=sys.stderr)
-        hint = f", or type {step['free_text']}" if step.get("free_text") else ""
-        raw = input(f"choose 1-{len(step['options'])}{hint}, or d to describe: ").strip()
+        other = len(card["options"]) + 1
+        print(f"  {other}. Other (please specify)", file=sys.stderr)
+        raw = input(f"choose 1-{other}, or just type your answer: ").strip()
         if not raw:
             continue
-        if raw.isdigit() and 1 <= int(raw) <= len(step["options"]):
-            value = step["options"][int(raw) - 1]["value"]
-            if value == NL or value == "again":
-                text = describe()
-                if text:
-                    if value == "again":
-                        record(step["id"], value)
-                    record(DESCRIBE, "text:" + text)
-                continue
-            if value == "@text":
-                raw = input(f"{step['free_text']}: ").strip()
-                if raw:
-                    record(step["id"], "text:" + raw)
-                continue
-            record(step["id"], value)
-        elif raw.lower() in ("d", "describe"):
-            if text := describe():
-                record(DESCRIBE, "text:" + text)
-        elif step.get("free_text") and " " not in raw:
-            record(step["id"], "text:" + raw)  # a typed value (pattern, date)
+        if raw.isdigit() and 1 <= int(raw) < other:
+            answer = {"choice": card["options"][int(raw) - 1]["value"]}
         else:
-            record(DESCRIBE, "text:" + raw)  # words: a description
-    return given
+            text = input("your answer: ").strip() if raw == str(other) else raw
+            if not text:
+                continue
+            answer = {"other": text}
+            print("  … working out what that means", file=sys.stderr, flush=True)
+        path = ANSWERS_DIR / f"{q['id']}.terminal.json"
+        given = json.loads(path.read_text()).get("answers", {}) if path.exists() else {}
+        _write(path, {"answers": {**given, str(card["n"]): answer}, "updated_at": now()})
+        try:
+            advance(q)
+        except LLMError as e:
+            sys.exit(f"could not read that answer: {e}; run the answer command again to retry")
+    return q
 
 
-def interpret(q: dict, text: str) -> dict:
-    """Ask Claude what the description means for this question; appends the confirm step."""
-    from .scope_questions import interpret_description
-    result = interpret_description(q, text.removeprefix("text:"))
-    return add_interpretation(q, text, result)
-
-
-def wait(q: dict, advance, poll_s: int = 5) -> None:
-    """Block until the question is answered in chat or in another terminal. ``advance``
-    (scope_questions.advance) interprets plain-language answers as they arrive."""
+def wait(q: dict, poll_s: int = 5) -> dict:
+    """Block until the question is answered in chat or in another terminal."""
     print(f"waiting for your answer to '{q['title']}' (question {q['id']}): sent to you as a direct message by NanoClaw; "
           f"or answer in a terminal: cd ontology && .venv/bin/python ontology_runtime.py answer {q['id']}", file=sys.stderr, flush=True)
-    last = -1
+    shown = None
     while True:
-        advance(q)
+        try:
+            advance(q)
+        except LLMError as e:
+            print(f"  … could not read the answer yet ({e}); retrying", file=sys.stderr, flush=True)
         q = get(q["id"]) or q
-        if q["status"] != "open" or complete(q):
-            return
-        given = answers(q)
-        if len(given) != last:
-            step = next_step(q, given)
-            print(f"  … {len(given)} answered; next: {step['prompt'] if step else '-'}", file=sys.stderr, flush=True)
-            last = len(given)
+        if q["status"] != "open":
+            return q
+        if q["card"]["n"] != shown:
+            shown = q["card"]["n"]
+            print(f"  … card {shown}: {q['card']['prompt'].splitlines()[-1]}", file=sys.stderr, flush=True)
         time.sleep(poll_s)

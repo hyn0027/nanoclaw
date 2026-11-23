@@ -35,11 +35,16 @@ unknown kind, instance, or effect type is dropped and listed as rejected.
     agent group's setup (container config: skills, MCP servers, packages; Claude settings;
     `container/skills/`; OneCLI credential grants) is unchanged since the session's last
     sync, the host answers at once. Otherwise it runs `ontology_runtime.py sync --session`:
-    base changes, the operator's answers (it waits for them, however long), expansions for
-    new sources, and the agent's OneCLI policy groups. An approved MCP server or package
-    restarts the container, so its first turn is where that change is synced;
+    base changes, the operator's answers (it waits for them, however long), and the agent's
+    OneCLI policy groups. An approved MCP server or package restarts the container, so its
+    first turn is where that change is synced;
   - before the agent loads a skill (the Skill tool, or a Read of a `SKILL.md`; once per skill
-    per container): `sync --skill`, which also makes and switches on the skill's policy group;
+    per container): `sync --skill`, which also expands that skill when it has no reviewed
+    graph and makes and switches on its policy group;
+  - after a sync, in the background (nobody waits): `sync --sources` expands the other queued
+    sources (skills with no reviewed graph, added packages), one per run, so a later sync
+    waits behind at most one. Policies are drafted from reviewed graphs only, so they never
+    depend on these expansions;
   - after every turn (nobody waits): `sync --traffic` expands from the calls the turn made.
 
   A sync that fails is refused (fail closed): the turn is not run and the user is told why,
@@ -133,23 +138,30 @@ fine-grained GitHub token's repositories or permissions). The runtime asks:
 
 A session that starts already connected with a current saved answer is not asked. How:
 
-- `materialize.py` run in a terminal asks there, step by step, and continues;
+- `materialize.py` run in a terminal asks there, card by card, and continues;
 - otherwise the question is written to `data/ontology-runtime/questions/<id>.json` and the
-  host DMs the owner (global admins first, like approvals) one button card per step:
-  repositories, access preset (or per area), account permissions, expiry. Clicks are recorded
-  in `data/ontology-runtime/answers/<id>.json`. Options that need typing (repository
-  patterns, an expiry date) take your next DM (below); `ontology_runtime.py answer <id>`
-  answers in a terminal instead;
-- when every step is answered, the waiting sync writes the declaration, closes the question,
-  and the host confirms by DM.
+  host DMs the owner (global admins first, like approvals) one button card at a time.
+  Answers are recorded in `data/ontology-runtime/answers/<id>.json`;
+  `ontology_runtime.py answer <id>` answers in a terminal instead;
+- when every field is filled, a last card shows what will be saved; on "Yes" the waiting
+  sync writes the declaration, closes the question, and the host confirms by DM.
 
-**In your own words.** Every question's first card has "Describe it in my own words"; in the
-terminal you can type `d` (or just write words) at any prompt. In Discord your next DM is
-captured for the question instead of reaching the agent (a router message interceptor, 15-minute
-window); the "type it" options (repository patterns, expiry date) work the same way. Claude
-(`claude -p`) turns the description into a declaration and the next card asks "I understood: …
-Correct?" — save it, describe again, or go back to the choices. Permission names follow
-GitHub's fine-grained names, so ones the choices do not list (e.g. `statuses`) can be declared.
+**Cards.** Each card has up to four choices plus **Other (please specify)**. A topic's fixed
+steps come first (GitHub: repositories, access preset or per area, account permissions,
+expiry); when none is left and fields are still missing, Claude writes the next choice
+question from the topic's field schema. When a saved answer exists, the first card asks
+whether it still holds.
+Every card after the first also has **← Back to the last question**, which undoes the last
+answer (a choice or an Other) and shows that card again.
+Cards never mention observed instances (materialize runs, discovered repositories, captured
+traffic): only the topic's fields and what you answered.
+
+**Other.** In Discord your next DM after "Other" is captured for the question instead of
+reaching the agent (a router message interceptor, 15-minute window); in the terminal, type
+anything that is not a choice number. Claude (`claude -p`) reads it against the topic's
+fields and fills whatever it covers, so one answer can settle several cards (or correct an
+earlier one, including on the final card). When it settles nothing, the card is asked again
+with what was unclear.
 
 **Asking again.** Widening a fine-grained token's permissions on GitHub keeps the token, so
 OneCLI's secret (and hence staleness detection) does not change. Run
@@ -157,8 +169,10 @@ OneCLI's secret (and hence staleness detection) does not change. Run
 
 Until then materialize waits (in a terminal it asks; without one it waits for the DM answer)
 and the runtime holds that session's expansions; captured calls stay pending, nothing is
-assumed. `ontology_runtime.py questions` lists open questions. Per-environment steps and the
-mapping to a declaration live in `ontology/src/runtime/scope_questions.py` (`SCOPED`).
+assumed. `ontology_runtime.py questions` lists open questions. The engine is
+`ontology/src/runtime/questions.py`; topics (fields, guidance for Claude, optional fixed steps,
+where the answer is saved) are in `ontology/src/runtime/topics.py` (`TOPICS`). A new environment
+is one more `Topic`; the host's card code does not change.
 
 ## Commands
 

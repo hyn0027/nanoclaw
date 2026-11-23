@@ -139,9 +139,9 @@ def github(ctx: Context) -> None:
     declaration = ctx.declared(host)
     if declaration is None or declaration.stale:
         # Not observable: ask the operator (terminal, or a NanoClaw DM) and wait for the answer.
-        from ....runtime.scope_questions import require
+        from ....runtime.topics import require
         session = ctx.snap.facts["session"]
-        if require(session["agent_group_id"], session["id"], "github", sorted(r["full_name"] for r in repos if r.get("private"))):
+        if require(session["agent_group_id"], session["id"], "github"):
             declaration = ctx.declared(host)
     scope = declaration.scope if declaration else None
     patterns = (scope or {}).get("repositories", [])

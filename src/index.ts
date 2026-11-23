@@ -65,10 +65,6 @@ async function main(): Promise<void> {
   // 0. Circuit breaker — backoff on rapid restarts
   await enforceStartupBackoff();
 
-  // 0.5 Upgrade tripwire — disabled in this local checkout, so local commits run
-  // as is. Re-enable with enforceUpgradeTripwire() from ./upgrade-state.js.
-  log.warn('Upgrade tripwire disabled (local checkout); running the checked-out code as is');
-
   // 1. Init central DB
   const db = await initDb(CENTRAL_DB_PATH, { role: 'host' });
   await runMigrations(db, undefined, { mode: 'auto' });
