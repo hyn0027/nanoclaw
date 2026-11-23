@@ -4,7 +4,7 @@
  * Polls every running session about once a second (and every active session
  * once a minute, which picks up the final rows after a container exits) and
  * appends new activity to logs/sessions/<agent-group>/<session>/actions.jsonl.
- * See export.ts for the file format. `scripts/trace.ts` renders it.
+ * See export.ts for the file format.
  *
  * Disabled with NANOCLAW_ACTION_LOG=false.
  */
